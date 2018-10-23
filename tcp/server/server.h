@@ -24,6 +24,7 @@
 #define DEFAULT_PORT 21
 #define DEFAULT_ROOT "/tmp"
 #define MAX_SIZE 1024
+#define COMMAND_NUM 16
 
 char *CLIENT_INSTRUCTION[]=
 {
@@ -49,6 +50,9 @@ int server_work(int argc,char **argv);
 
 //服务器与每个客户端的交互进程
 void server_process(int controlfd);
+
+//用户登录
+void server_login(int controlfd);
 
 
 
