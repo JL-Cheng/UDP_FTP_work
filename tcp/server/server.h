@@ -61,6 +61,9 @@ int server_port(int controlfd,char *param,char *ip,int *port);
 //服务器PASV命令的控制函数
 int server_pasv(int controlfd);
 
+//服务器RETR命令控制函数
+int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd);
+
 
 
 /* =============================================

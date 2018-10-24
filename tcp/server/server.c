@@ -394,6 +394,28 @@ void server_process(int controlfd)
 			}
 			continue;
 		}
+		//若是RETR指令
+		else if(!(strcmp(cmd,"RETR")))
+		{
+			if(server_retr(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd))
+			{
+				printf("Send file wrong.\n");
+			}
+			if(is_PORT)
+			{
+				is_PORT=0;
+				memset(PORT_ip, 0, 20);
+				PORT_port = 0;				
+			}
+			else if(is_PASV)
+			{	
+				is_PASV=0;
+				if(PASV_listenfd > 0)
+					close(PASV_listenfd);
+				PASV_listenfd=-1;
+			}
+			continue;
+		}
 		//若是其他命令
 		else
 		{
@@ -481,31 +503,6 @@ int server_port(int controlfd,char *param,char *ip,int *port)
 	printf("ip:%s,port:%d\n",ip,*port);
 	return 0;
 	
-	/*
-	//创建套接字
-	if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-	{
-		printf("Error socket(): %s(%d)\n", strerror(errno), errno);
-		send_data(controlfd,prompt2,strlen(prompt2));
-		return -1;
-    }
-
-	//设置协议地址
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = port;
-	addr.sin_addr.s_addr = inet_addr(ip);
-
-	// 在套接字上创建连接
-	if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
-	{
-       	printf("Error connect(): %s(%d)\n", strerror(errno), errno);
-       	send_data(controlfd,prompt2,strlen(prompt2));
-		return -1;
-    }  
-    	  
-	return datafd;*/
-	
 }
 
 /* 函数功能：服务器PASV命令的控制函数
@@ -567,6 +564,156 @@ int server_pasv(int controlfd)
 	send_data(controlfd,prompt1,strlen(prompt1));
 	
 	return listenfd;
+}
+
+/* 函数功能：服务器RETR命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：文件名称
+ * -is_PORT：是否为PORT连接形式
+ * -PORT_ip：PORT连接的地址
+ * -PORT_port：PORT连接的端口
+ * -is_PASV：是否为PASV连接形式
+ * -PASV_listenfd：PASV监听端口
+ * 返回值：正确返回0,否则返回-1。
+ */
+int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd)
+{
+	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\n\r";
+	char prompt2[] = "425 Can't open data connection.\n\r";
+	char prompt3[] = "550 Requested file action not taken.\n\r";
+	char prompt4[] = "150 File status okay; about to open data connection.\n\r";
+	char prompt5[] = "451 Requested action aborted: local error in processing.\n\r";
+	char prompt6[] = "426 Connection closed; transfer aborted.\n\r";
+	char prompt7[] = "125 Data connection already open; transfer starting.\n\r";
+	char prompt8[] = "250 Requested file action okay, completed.\n\r";
+	char prompt9[] = "226 Closing data connection.\n\r";
+	
+	if(is_PORT)
+	{
+		struct sockaddr_in addr;
+		int datafd = -1;
+		int filefd = -1;	
+		FILE* fp = NULL;
+		char data[MAX_SIZE];
+		size_t num_read;
+		fd_set rfds,wfds; //读写文件句柄
+		struct timeval timeout={3,0}; //select等待3秒
+		int maxfd = 0;
+		
+		printf("file:%s\n",param);									
+		fp = fopen(param, "rb"); // 打开文件
+		if (!fp)
+		{
+			send_data(controlfd,prompt3,strlen(prompt3));
+			return -1;
+		}		
+		send_data(controlfd,prompt4,strlen(prompt4));
+		filefd = fileno(fp);
+		
+		//创建数据套接字
+		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		{
+			printf("Error socket(): %s(%d)\n", strerror(errno), errno);
+			send_data(controlfd,prompt2,strlen(prompt2));
+			fclose(fp);
+			return -1;
+    	}
+
+		//设置协议地址
+		memset(&addr, 0, sizeof(addr));
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(PORT_port);
+		addr.sin_addr.s_addr = inet_addr(PORT_ip);
+
+		// 在套接字上创建连接
+		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
+		{
+       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+       		send_data(controlfd,prompt2,strlen(prompt2));
+       		close(datafd);
+       		fclose(fp);
+			return -1;
+    	}
+    	
+    	send_data(controlfd,prompt7,strlen(prompt7));
+    	
+    	do
+    	{
+    		//清空集合
+    		FD_ZERO(&rfds);
+    		FD_ZERO(&wfds);
+    		//添加描述符 
+			FD_SET(datafd,&wfds); 
+			FD_SET(filefd,&rfds); 
+			//描述符最大值加1 
+			maxfd=datafd>filefd?datafd+1:filefd+1; 
+			
+			//使用select判断状态
+			switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
+			{
+				case -1:
+					send_data(controlfd,prompt5,strlen(prompt5));
+					close(datafd);
+					fclose(fp);
+					return -1;
+					break;
+				case 0:
+					break;
+				default:
+					//如果文件可读
+					if(FD_ISSET(filefd, &rfds))
+    				{
+    					//读文件内容
+						num_read = fread(data, 1, MAX_SIZE, fp);
+						printf("num_read:%d\n",num_read);
+						if (num_read < 0) 
+						{
+							send_data(controlfd,prompt5,strlen(prompt5));
+							close(datafd);
+							fclose(fp);
+							return -1;
+						}
+						
+						//如果接口可写
+	  					if(FD_ISSET(datafd, &wfds))
+						{
+							//写入接口
+							if (send_data(datafd, data, num_read) < 0) 
+							{
+								send_data(controlfd,prompt6,strlen(prompt6));
+								close(datafd);
+								fclose(fp);
+								return -1;
+							}
+							printf("ok\n");
+
+						}
+
+    				}
+    				
+					break;
+			}
+    	}while(num_read > 0);
+    	
+    	send_data(controlfd,prompt8,strlen(prompt8));
+    	
+    	close(datafd);
+    	
+    	send_data(controlfd,prompt9,strlen(prompt9));
+    	
+    	fclose(fp);
+	}
+	else if(is_PASV)
+	{
+	}
+	else
+	{
+		send_data(controlfd,prompt1,strlen(prompt1));
+		return -1;
+	}
+	
+	return 0;
 }
 
 int main(int argc, char **argv) {

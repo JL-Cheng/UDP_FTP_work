@@ -51,6 +51,9 @@ int client_port(char* param,char *ip,int *port);
 //客户端PASV命令的控制函数
 int client_pasv(int sockfd,char *buffer,char *ip,int *port);
 
+//客户端RETR命令控制函数
+int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,char * PASV_ip,int PASV_port);
+
 
 /* =============================================
  * 基础处理函数
