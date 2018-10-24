@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <time.h>
 
 /* =============================================
  * 一些宏定义或全局数据
@@ -51,8 +52,14 @@ int server_work(int argc,char **argv);
 //服务器与每个客户端的交互进程
 void server_process(int controlfd);
 
-//用户登录
+//服务器控制用户登录
 void server_login(int controlfd);
+
+//服务器PORT命令的控制函数
+int server_port(int controlfd,char *param,char *ip,int *port);
+
+//服务器PASV命令的控制函数
+int server_pasv(int controlfd);
 
 
 
@@ -72,6 +79,9 @@ int receive_cmd(int sockfd,char *cmd,char *param);
 
 //发送数据
 int send_data(int sockfd,char *buf,int bufsize);
+
+//得到ip地址和端口port
+int get_ip_port(char *param,char *ip,int *port);
 
 
 #endif

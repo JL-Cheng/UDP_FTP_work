@@ -25,7 +25,7 @@ int create_socket(int port)
 	//设置套接字地址与其状态
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_port = port;
+	addr.sin_port = htons(port);
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	
@@ -161,6 +161,94 @@ int send_data(int sockfd,char *buf,int bufsize)
 	return num_bytes;	
 }
 
+/* 函数功能：得到IP地址和port端口号
+ * 传入参数：
+ * -param：带有ip和port的字符串
+ * -ip：返回的ip地址
+ * -port：返回的端口号
+ * 返回值：错误返回-1;正确返回0。
+ */
+int get_ip_port(char *param,char *ip,int *port)
+{
+	//检测参数
+	char *ch;
+	
+	*port = 0;
+	memset(ip,0,20);
+	
+	ch = strtok(param, ",");
+	if(!ch || strlen(ch)>3)
+	{
+		printf("Wrong port param.\n");
+		return -1;
+	}
+	else
+	{
+		for(int i=0;i<strlen(ch);i++)
+		{
+			if(ch[i]<'0' || ch[i]>'9')
+			{
+				printf("Wrong port param.\n");
+				return -1;	
+			}
+		}
+	}
+	
+	strcpy(ip,ch);
+	for(int i=0;i<3;i++)
+	{
+		ch = strtok(NULL, ",");
+		if(!ch || strlen(ch)>3)
+		{
+			printf("Wrong port param.\n");
+			return -1;
+		}
+		else
+		{
+			for(int i=0;i<strlen(ch);i++)
+			{
+				if(ch[i]<'0' || ch[i]>'9')
+				{
+					printf("Wrong port param.\n");
+					return -1;	
+				}
+			}
+		}
+		strcat(ip,".");
+		strcat(ip,ch);
+	}
+	
+	for(int i=0;i<2;i++)
+	{
+		ch = strtok(NULL, ",");
+		if(!ch)
+		{
+			printf("Wrong port param.\n");
+			return -1;
+		}
+		else
+		{
+			for(int i=0;i<strlen(ch);i++)
+			{
+				if(ch[i]<'0' || ch[i]>'9')
+				{
+					printf("Wrong port param.\n");
+					return -1;	
+				}
+			}
+		}
+		*port = *port *256 + atoi(ch);
+	}
+	
+	if(*port < 20000 || *port > 65535)
+	{
+		printf("Port should range from 20000 to 65535.\n");
+		return -1;
+	}	
+	
+	return 0;
+}
+
 /* =============================================
  * 服务器相关函数
  * =============================================
@@ -218,9 +306,9 @@ int server_work(int argc,char **argv)
 		
 		else if (!pid)
 		{
+			close(listenfd);
 			server_process(controlfd);
 			close(controlfd);
-			close(listenfd);
 			exit(0);
 		}
 		
@@ -239,11 +327,18 @@ int server_work(int argc,char **argv)
  */
 void server_process(int controlfd)
 {
-	int datafd;//数据传输套接字
+	int PASV_listenfd = -1;//PASV中监听传输套接字
+	char PORT_ip[20];//PORT指令数据传输ip地址
+	int PORT_port = 0;//PORT指令数据传输端口
+	int is_PORT = 0;//使用PORT命令主动传输
+	int is_PASV = 0;//使用PASV命令被动传输
+	
+	int flag;//状态参数
 	char cmd[5];//客户端命令（verb）
 	char param[MAX_SIZE];//客户端命令参数
 	
 	char prompt1[] = "220 Anonymous FTP server ready.\n\r";
+	char prompt2[] = "502 Please use valid command.\n\r";
 
 	//首先返回成功连接信号
 	printf("success_connect\n");
@@ -251,7 +346,61 @@ void server_process(int controlfd)
 	
 	//进行用户登录验证
 	printf("user_login\n");
-	server_login(controlfd);
+	//server_login(controlfd);
+	
+	//开启循环监听用户消息
+	printf("start_work\n");
+	while(1)
+	{
+		if(receive_cmd(controlfd,cmd,param))
+			continue;
+		//若是PORT指令
+		if(!(strcmp(cmd,"PORT")))
+		{
+			flag = server_port(controlfd,param,PORT_ip,&PORT_port);
+			if(flag < 0)//失败
+			{
+				memset(PORT_ip, 0, 20);
+				PORT_port = 0;
+				is_PORT=0;
+			}
+			else
+			{
+				is_PORT=1;
+				is_PASV=0;
+				if(PASV_listenfd > 0)
+					close(PASV_listenfd);
+				PASV_listenfd=-1;
+			}
+			continue;
+		}
+		//若是PASV指令
+		else if(!(strcmp(cmd,"PASV")))
+		{
+			flag = server_pasv(controlfd);
+			if(flag < 0)//失败
+			{
+				return;
+			}
+			else
+			{
+				is_PORT=0;
+				is_PASV=1;
+				if(PASV_listenfd > 0)
+					close(PASV_listenfd);
+				PASV_listenfd = flag;
+				memset(PORT_ip, 0, 20);
+				PORT_port = 0;
+			}
+			continue;
+		}
+		//若是其他命令
+		else
+		{
+			send_data(controlfd,prompt2,strlen(prompt2));
+			continue;
+		}
+	}
 
 }
 
@@ -276,7 +425,7 @@ void server_login(int controlfd)
 		if(receive_cmd(controlfd,cmd,param))
 			continue;
 		//首先必须是USER指令
-		if(!(strcmp(cmd,CLIENT_INSTRUCTION[0])) && !user_ok)
+		if(!(strcmp(cmd,"USER")) && !user_ok)
 		{
 			if(!(strcmp(param,"anonymous")))
 			{
@@ -289,7 +438,7 @@ void server_login(int controlfd)
 			}
 		}
 		//其次输入邮箱，用户登录成功
-		else if(!(strcmp(cmd,CLIENT_INSTRUCTION[1])) && user_ok)
+		else if(!(strcmp(cmd,"PASS")) && user_ok)
 		{
 			send_data(controlfd,prompt4,strlen(prompt4));
 			break;
@@ -305,6 +454,119 @@ void server_login(int controlfd)
 	}	
 	
 	return;
+}
+
+
+/* 函数功能：服务器PORT命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：ip地址和端口号的参数
+ * -ip：传入的ip地址
+ * -port：传入的端口
+ * 返回值：参数均正确返回0,否则返回-1。
+ */
+int server_port(int controlfd,char *param,char *ip,int *port)
+{
+
+	char prompt1[] = "501 Syntax error in parameters or arguments.\n\r";
+	char prompt2[] = "200 PORT command is ok.\n\r";
+	
+	if(get_ip_port(param,ip,port)<0)
+	{
+		send_data(controlfd,prompt1,strlen(prompt1));
+		return -1;
+	}
+	
+	send_data(controlfd,prompt2,strlen(prompt2));
+	printf("ip:%s,port:%d\n",ip,*port);
+	return 0;
+	
+	/*
+	//创建套接字
+	if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+	{
+		printf("Error socket(): %s(%d)\n", strerror(errno), errno);
+		send_data(controlfd,prompt2,strlen(prompt2));
+		return -1;
+    }
+
+	//设置协议地址
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_port = port;
+	addr.sin_addr.s_addr = inet_addr(ip);
+
+	// 在套接字上创建连接
+	if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
+	{
+       	printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+       	send_data(controlfd,prompt2,strlen(prompt2));
+		return -1;
+    }  
+    	  
+	return datafd;*/
+	
+}
+
+/* 函数功能：服务器PASV命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * 返回值：正确返回listenfd,否则返回-1。
+ */
+int server_pasv(int controlfd)
+{
+	char prompt1[50] = "227 Entering Passive Mode ";
+	char prompt2[] = "421 Service not available, closing control connection.\n\r";
+	
+	int port = 0;
+	char ip[20];
+	char p[5];
+	char *ch;
+	
+	//随机生成port
+	srand((unsigned)time(NULL));
+	port = 	rand() % 45535 + 20000;
+	
+	printf("port:%d\n",port);
+	//开始监听
+	int listenfd = create_socket(port);	
+	if(listenfd<0)
+	{
+		printf("Create listenfd error.\n");
+		send_data(controlfd,prompt2,strlen(prompt2));
+		return -1;
+	}
+	
+	struct sockaddr_in addr;
+	socklen_t len = sizeof addr;
+	getsockname(controlfd, (struct sockaddr*)&addr, &len); // 获得服务器ip
+	inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
+	
+	printf("ip:%s\n",ip);
+		
+	strcat(prompt1,"(");
+	ch = strtok(ip, ".");
+	strcat(prompt1,ch);
+	for(int i=0;i<3;i++)
+	{
+		ch = strtok(NULL, ".");
+		strcat(prompt1,",");
+		strcat(prompt1,ch);
+	}
+	
+	memset(p,0,5);
+	sprintf(p, "%d", port / 256); 
+	strcat(prompt1,",");
+	strcat(prompt1,p);
+	memset(p,0,5);
+	sprintf(p, "%d", port % 256); 
+	strcat(prompt1,",");
+	strcat(prompt1,p);
+	strcat(prompt1,")\n\r");
+	
+	send_data(controlfd,prompt1,strlen(prompt1));
+	
+	return listenfd;
 }
 
 int main(int argc, char **argv) {
