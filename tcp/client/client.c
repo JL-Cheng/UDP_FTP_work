@@ -452,15 +452,25 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 	int data_size = -1;
 	int len = 0;;
 	char *ch,*prompt[9];
-	FILE* fp = fopen(param, "wb");	
+	FILE* fp;
 	int datafd = -1;
 	int filefd = -1;
 	int receive_end = 0;
+	int client_data_connect = 0;
+	int server_data_connect = 0;	
 	
 	fd_set rfds,wfds; //读写文件句柄
-	struct timeval timeout={3,0}; //select等待3秒
+	struct timeval timeout={3,0}; //select 3秒轮讯
 	int maxfd = 0;
 	
+	//打开文件
+	ch = strtok(param,"/");
+	while(ch)
+	{
+		param = ch;
+		ch = strtok(NULL,"/");
+	}
+	fp = fopen(param, "wb");	
 	filefd = fileno(fp);
 		
 	if (send(sockfd, buffer, (int)strlen(buffer), 0) < 0 )
@@ -470,13 +480,11 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 		return -1;
 	}
 
-	//建立数据连接
+	//是PORT连接接收数据
 	if(is_PORT)
 	{
 		
 		int listenfd = -1;		
-		int client_data_connect = 0;
-		int server_data_connect = 0;	
 		
 		listenfd = create_socket(PORT_port);	
 		if(listenfd<0)
@@ -513,7 +521,7 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 			}	
 			
 			//使用select判断状态
-			switch(select(maxfd,&rfds,NULL,NULL,&timeout))
+			switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
 			{
 				case -1:
 					fclose(fp);
@@ -635,6 +643,138 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 	}
 	else if(is_PASV)
 	{
+	
+		struct sockaddr_in addr;	
+		//创建数据套接字
+		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		{
+			printf("Error socket(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			fclose(fp);
+			return -1;
+    	}
+
+		//设置协议地址
+		memset(&addr, 0, sizeof(addr));
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(PASV_port);
+		addr.sin_addr.s_addr = inet_addr(PASV_ip);
+
+		// 在套接字上创建连接
+		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
+		{
+       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+       		close(sockfd);
+       		close(datafd);
+       		fclose(fp);
+			return -1;
+    	}
+    	
+		//select进行接口判断
+		while(1)
+		{
+    		//清空集合
+   			FD_ZERO(&rfds);
+   			FD_ZERO(&wfds);
+   			//添加描述符 
+			FD_SET(filefd,&wfds); 
+			FD_SET(sockfd,&rfds); 
+			FD_SET(datafd,&rfds); 
+			//描述符最大值加1 
+			maxfd=datafd>filefd?datafd+1:filefd+1; 
+			maxfd=maxfd>(sockfd+1)?maxfd:(sockfd+1);
+	
+			
+			//使用select判断状态
+			switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
+			{
+				case -1:
+					fclose(fp);
+					close(datafd);
+					return 1;
+					break;
+				case 0:
+					break;
+				default:
+					//如果控制套接字可读
+					if(FD_ISSET(sockfd, &rfds))
+    				{
+    					//读套接字传来的内容
+						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
+						{
+							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
+							close(datafd);
+							close(sockfd);
+							fclose(fp);
+							return -1;
+						}
+		
+						buffer[len]='\0';							
+						
+						prompt[0] = buffer;
+						for(int i=0;;i++)
+						{
+							prompt[i] = strtok_r(prompt[i], "\n\r", &prompt[i+1]);
+							if(!prompt[i])
+								break;
+							printf(">>>> %s\n\r", prompt[i]);
+							
+							ch = strtok(prompt[i]," ");
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							{
+								close(datafd);
+								fclose(fp);
+								return 1;
+							}
+							else if(!strcmp(ch,"226"))
+							{
+								receive_end = 1;
+							}
+
+						}
+						
+    				}
+
+					//如果数据套接字可读
+					if(FD_ISSET(datafd, &rfds))
+	   				{
+	   					//读套接字传来的内容
+						data_size = recv(datafd, data, MAX_SIZE, 0);
+						if(data_size)
+							printf("data_size:%d\n",data_size);
+						if (data_size < 0) 
+						{
+							fclose(fp);
+							close(datafd);
+							return 1;
+						}
+					
+						//如果文件可写
+	  					if(FD_ISSET(filefd, &wfds))
+						{
+							//写入文件
+							if (fwrite(data, 1, data_size, fp) < data_size) 
+							{
+								fclose(fp);
+								close(datafd);
+								return 1;
+							}
+
+						}
+
+	   				}
+					break;
+					
+    			}
+    			
+    			if(receive_end && !data_size)
+				{
+					close(datafd);
+					fclose(fp);
+					return 0;
+				}
+		}    	
+    		
 	}
 	else
 	{

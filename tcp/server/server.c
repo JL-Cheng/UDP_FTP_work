@@ -410,8 +410,6 @@ void server_process(int controlfd)
 			else if(is_PASV)
 			{	
 				is_PASV=0;
-				if(PASV_listenfd > 0)
-					close(PASV_listenfd);
 				PASV_listenfd=-1;
 			}
 			continue;
@@ -500,7 +498,7 @@ int server_port(int controlfd,char *param,char *ip,int *port)
 	}
 	
 	send_data(controlfd,prompt2,strlen(prompt2));
-	printf("ip:%s,port:%d\n",ip,*port);
+	printf("PORT:\nip:%s\nport:%d\n",ip,*port);
 	return 0;
 	
 }
@@ -524,7 +522,7 @@ int server_pasv(int controlfd)
 	srand((unsigned)time(NULL));
 	port = 	rand() % 45535 + 20000;
 	
-	printf("port:%d\n",port);
+	printf("PASV:\nport:%d\n",port);
 	//开始监听
 	int listenfd = create_socket(port);	
 	if(listenfd<0)
@@ -589,31 +587,33 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	char prompt8[] = "250 Requested file action okay, completed.\n\r";
 	char prompt9[] = "226 Closing data connection.\n\r";
 	
+	int datafd = -1;
+	int filefd = -1;	
+	FILE* fp = NULL;
+	char data[MAX_SIZE];
+	char filename[200];
+	size_t num_read;
+	fd_set rfds,wfds; //读写文件句柄
+	struct timeval timeout={3,0}; //select等待3秒
+	int maxfd = 0;
+	
+	// 打开文件
+	strcpy(filename,FILE_ROOT);
+	strcat(filename,param);								
+	fp = fopen(filename, "rb"); 
+	if (!fp)
+	{
+		send_data(controlfd,prompt3,strlen(prompt3));
+		return -1;
+	}		
+	send_data(controlfd,prompt4,strlen(prompt4));
+	filefd = fileno(fp);		
+	
+	//建立数据连接
 	if(is_PORT)
 	{
-		struct sockaddr_in addr;
-		int datafd = -1;
-		int filefd = -1;	
-		FILE* fp = NULL;
-		char data[MAX_SIZE];
-		size_t num_read;
-		fd_set rfds,wfds; //读写文件句柄
-		struct timeval timeout={3,0}; //select等待3秒
-		int maxfd = 0;
-		
-		printf("file:%s\n",param);									
-		fp = fopen(param, "rb"); // 打开文件
-		printf("file ok\n");
-		if (!fp)
-		{
-			send_data(controlfd,prompt3,strlen(prompt3));
-			printf("file not ok\n");
-			return -1;
-		}		
-		send_data(controlfd,prompt4,strlen(prompt4));
-		filefd = fileno(fp);
-		printf("fileno:%d\n",filefd);
-		
+		struct sockaddr_in addr;	
+	
 		//创建数据套接字
 		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		{
@@ -641,80 +641,100 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
     	
     	send_data(controlfd,prompt7,strlen(prompt7));
     	
-    	do
-    	{
-    		//清空集合
-    		FD_ZERO(&rfds);
-    		FD_ZERO(&wfds);
-    		//添加描述符 
-			FD_SET(datafd,&wfds); 
-			FD_SET(filefd,&rfds); 
-			//描述符最大值加1 
-			maxfd=datafd>filefd?datafd+1:filefd+1; 
-			
-			//使用select判断状态
-			switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
-			{
-				case -1:
-					send_data(controlfd,prompt5,strlen(prompt5));
-					close(datafd);
-					fclose(fp);
-					return -1;
-					break;
-				case 0:
-					break;
-				default:
-					//如果文件可读
-					if(FD_ISSET(filefd, &rfds))
-    				{
-    					//读文件内容
-						num_read = fread(data, 1, MAX_SIZE, fp);
-						printf("num_read:%d\n",num_read);
-						if (num_read < 0) 
-						{
-							send_data(controlfd,prompt5,strlen(prompt5));
-							close(datafd);
-							fclose(fp);
-							return -1;
-						}
-						
-						//如果接口可写
-	  					if(FD_ISSET(datafd, &wfds))
-						{
-							//写入接口
-							if (send_data(datafd, data, num_read) < 0) 
-							{
-								send_data(controlfd,prompt6,strlen(prompt6));
-								close(datafd);
-								fclose(fp);
-								return -1;
-							}
-							printf("ok\n");
-
-						}
-
-    				}
-    				
-					break;
-			}
-    	}while(num_read > 0);
-    	
-    	send_data(controlfd,prompt8,strlen(prompt8));
-    	
-    	close(datafd);
-    	
-    	send_data(controlfd,prompt9,strlen(prompt9));
-    	
-    	fclose(fp);
 	}
 	else if(is_PASV)
 	{
+		//设置6s超时
+		struct timeval accept_timeout = {6,0};  
+		if (setsockopt(PASV_listenfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&accept_timeout, sizeof(struct timeval)) < 0)  
+		{  
+			printf("Error setsockopt(): %s(%d)\n", strerror(errno), errno);
+			send_data(controlfd,prompt2,strlen(prompt2));
+			close(PASV_listenfd);
+			fclose(fp);
+			return -1;  
+		}  
+		datafd = accept_socket(PASV_listenfd);
+		if(datafd<0)
+		{
+			printf("Create datafd error.\n");
+			send_data(controlfd,prompt2,strlen(prompt2));
+			close(PASV_listenfd);
+			fclose(fp);
+			return -1;
+		}
+		send_data(controlfd,prompt7,strlen(prompt7));
+	
 	}
 	else
 	{
 		send_data(controlfd,prompt1,strlen(prompt1));
 		return -1;
 	}
+	
+	//传输数据
+   	do
+   	{
+   		//清空集合
+   		FD_ZERO(&rfds);
+   		FD_ZERO(&wfds);
+   		//添加描述符 
+		FD_SET(datafd,&wfds); 
+		FD_SET(filefd,&rfds); 
+		//描述符最大值加1 
+		maxfd=datafd>filefd?datafd+1:filefd+1; 
+			
+		//使用select判断状态
+		switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
+		{
+			case -1:
+				send_data(controlfd,prompt5,strlen(prompt5));
+				close(datafd);
+				fclose(fp);
+				return -1;
+				break;
+			case 0:
+				break;
+			default:
+				//如果文件可读
+				if(FD_ISSET(filefd, &rfds))
+    			{
+    				//读文件内容
+					num_read = fread(data, 1, MAX_SIZE, fp);
+					printf("num_read:%d\n",num_read);
+					if (num_read < 0) 
+					{
+						send_data(controlfd,prompt5,strlen(prompt5));
+						close(datafd);
+						fclose(fp);
+						return -1;
+					}
+						
+					//如果接口可写
+					if(FD_ISSET(datafd, &wfds))
+					{
+						//写入接口
+						if (send_data(datafd, data, num_read) < 0) 
+						{
+							send_data(controlfd,prompt6,strlen(prompt6));
+							close(datafd);
+							fclose(fp);
+							return -1;
+						}
+					}
+   				}
+    				
+				break;
+		}
+   	}while(num_read > 0);
+    	
+   	send_data(controlfd,prompt8,strlen(prompt8));
+   	
+   	close(datafd);
+   	
+   	send_data(controlfd,prompt9,strlen(prompt9));
+   	
+   	fclose(fp);
 	
 	return 0;
 }
