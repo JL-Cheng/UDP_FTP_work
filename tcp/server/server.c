@@ -603,13 +603,16 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		
 		printf("file:%s\n",param);									
 		fp = fopen(param, "rb"); // 打开文件
+		printf("file ok\n");
 		if (!fp)
 		{
 			send_data(controlfd,prompt3,strlen(prompt3));
+			printf("file not ok\n");
 			return -1;
 		}		
 		send_data(controlfd,prompt4,strlen(prompt4));
 		filefd = fileno(fp);
+		printf("fileno:%d\n",filefd);
 		
 		//创建数据套接字
 		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
