@@ -74,6 +74,28 @@ int accept_socket(int listenfd)
 	return sockfd;	
 }
 
+/* 函数功能：发送数据
+ * 传入参数：
+ * -sockfd：数据传输的套接字
+ * -buf：缓冲区指针
+ * -bufsize：缓冲区大小
+ * 返回值：错误返回-1;正确则返回发送数据的字节数。
+ */
+int send_data(int sockfd,char *buf,int bufsize)
+{
+	size_t num_bytes;
+
+	num_bytes = send(sockfd, buf, bufsize, 0);
+	if (num_bytes < 0)
+	{
+		printf("Error send(): %s(%d)\n", strerror(errno), errno);
+		return -1;
+	}
+
+	return num_bytes;	
+}
+
+
 /* 函数功能：从命令行读取参数
  * 传入参数：
  * -buffer：缓冲区
@@ -342,7 +364,30 @@ int client_work(int argc,char **argv)
 			continue;
 			
 		}
-		
+		else if(!(strcmp(cmd,"STOR")))//"STOR"
+		{
+			int flag = client_stor(sockfd,buffer,param,is_PORT,PORT_ip,PORT_port,is_PASV, PASV_ip,PASV_port);
+			if(flag < 0)
+			{
+				close(sockfd);
+				return 1;
+			}
+			if(is_PORT)
+			{
+				is_PORT=0;
+				memset(PORT_ip, 0, 20);
+				PORT_port = 0;				
+			}
+			else if(is_PASV)
+			{	
+				is_PASV=0;
+				memset(PASV_ip, 0, 20);
+				PASV_port = 0;	
+			}
+			continue;
+			
+		}
+				
 		//发送命令
 		if (send(sockfd, buffer, (int)strlen(buffer), 0) < 0 )
 		{
@@ -604,9 +649,6 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 					if(server_data_connect && client_data_connect && FD_ISSET(datafd, &rfds))
 	   				{
 	   					//读套接字传来的内容
-						data_size = recv(datafd, data, MAX_SIZE, 0);
-						if(data_size)
-							printf("data_size:%d\n",data_size);
 						if (data_size < 0) 
 						{
 							fclose(fp);
@@ -740,8 +782,6 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 	   				{
 	   					//读套接字传来的内容
 						data_size = recv(datafd, data, MAX_SIZE, 0);
-						if(data_size)
-							printf("data_size:%d\n",data_size);
 						if (data_size < 0) 
 						{
 							fclose(fp);
@@ -788,12 +828,367 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 		
 		buffer[len]='\0';			
 		printf(">>>> %s", buffer);
+		fclose(fp);
 		return 1;
 	}
 	
 	return 0;
 }
 
+/* 函数功能：客户端STOR命令控制函数
+ * 传入参数：
+ * -sockfd：控制套接字
+ * -buffer：发送缓冲区内容
+ * -param：文件名
+ * -is_PORT：是否为PORT连接形式
+ * -PORT_ip：PORT连接的地址
+ * -PORT_port：PORT连接的端口
+ * -is_PASV：是否为PASV连接形式
+ * -PASV_ip：PASV连接的地址
+ * -PASV_port：PASV连接的端口
+ * 返回值：正确返回0,否则连接错误返回-1，参数错误返回1。
+ */
+int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,char * PASV_ip,int PASV_port)
+{
+	char data[MAX_SIZE];
+	int data_size = -1;
+	int len = 0;;
+	char *ch,*prompt[9];
+	FILE* fp;
+	int datafd = -1;
+	int filefd = -1;
+	int send_end = 0;
+	int client_data_connect = 0;
+	int server_data_connect = 0;	
+	
+	fd_set rfds,wfds; //读写文件句柄
+	struct timeval timeout={3,0}; //select 3秒轮讯
+	int maxfd = 0;
+	
+	//打开文件
+	fp = fopen(param, "rb");
+	if (!fp)
+	{
+		printf("Open file error!\n");
+		return 1;
+	}			
+	filefd = fileno(fp);
+		
+	if (send(sockfd, buffer, (int)strlen(buffer), 0) < 0 )
+	{
+		printf("Error send(): %s(%d)\n", strerror(errno), errno);
+		close(sockfd);
+		return -1;
+	}
+
+	//是PORT连接传输数据
+	if(is_PORT)
+	{
+		
+		int listenfd = -1;		
+		
+		listenfd = create_socket(PORT_port);	
+		if(listenfd<0)
+		{
+			printf("Create listenfd error.\n");
+			close(sockfd);
+			fclose(fp);
+			return -1;
+		}
+		
+		//select进行接口判断
+		while(1)
+		{
+
+    		//清空集合
+   			FD_ZERO(&rfds);
+   			FD_ZERO(&wfds);
+   			//添加描述符 
+			FD_SET(filefd,&rfds); 
+			FD_SET(sockfd,&rfds); 
+			if (!client_data_connect)
+			{
+				FD_SET(listenfd,&rfds); 
+				//描述符最大值加1 
+				maxfd=listenfd>sockfd?listenfd+1:sockfd+1; 
+				maxfd=maxfd>(filefd+1)?maxfd:(filefd+1);
+			}
+			if(client_data_connect && server_data_connect)
+			{
+				FD_SET(datafd,&wfds); 
+				//描述符最大值加1 
+				maxfd=datafd>filefd?datafd+1:filefd+1; 
+				maxfd=maxfd>(sockfd+1)?maxfd:(sockfd+1);
+			}	
+			
+			//使用select判断状态
+			switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
+			{
+				case -1:
+					fclose(fp);
+					if(datafd>0)
+						close(datafd);
+					if(listenfd>0)
+						close(listenfd);
+					return 1;
+					break;
+				case 0:
+					break;
+				default:
+					//如果控制套接字可读
+					if(FD_ISSET(sockfd, &rfds))
+    				{
+    					//读套接字传来的内容
+						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
+						{
+							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
+							if(datafd>0)
+								close(datafd);
+							if(listenfd>0)
+								close(listenfd);
+							close(sockfd);
+							fclose(fp);
+							return -1;
+						}
+		
+						buffer[len]='\0';							
+						
+						prompt[0] = buffer;
+						for(int i=0;;i++)
+						{
+							prompt[i] = strtok_r(prompt[i], "\n\r", &prompt[i+1]);
+							if(!prompt[i])
+								break;
+							printf(">>>> %s\n\r", prompt[i]);
+							
+							ch = strtok(prompt[i]," ");
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							{
+								if(datafd>0)
+									close(datafd);
+								if(listenfd>0)
+									close(listenfd);
+								fclose(fp);
+								return 1;
+							}
+							else if(!strcmp(ch,"125"))
+							{
+								server_data_connect = 1;
+							}
+							else if(!strcmp(ch,"226"))
+							{
+								send_end = 1;
+							}
+
+						}
+						
+    				}
+    				
+    				//如果监听套接字可读
+					if(!client_data_connect && FD_ISSET(listenfd, &rfds))
+					{
+						datafd = accept_socket(listenfd);
+						if(datafd<0)
+						{
+							printf("Create datafd error.\n");
+							close(listenfd);
+							close(sockfd);
+							fclose(fp);
+							return -1;
+						}
+						client_data_connect = 1;
+						close(listenfd);
+						listenfd = -1;
+					}
+					
+						
+					//如果接口可写且文件可读
+					if(server_data_connect && client_data_connect && FD_ISSET(datafd, &wfds) && FD_ISSET(filefd, &rfds))
+					{
+
+						//读文件内容
+						data_size = fread(data, 1, MAX_SIZE, fp);
+					
+						if (data_size < 0) 
+						{
+							fclose(fp);
+							close(datafd);
+							return 1;
+						}
+								
+						//写入接口
+						if (send_data(datafd, data, data_size) < 0) 
+						{
+							fclose(fp);
+							close(datafd);
+							return 1;
+						}
+						
+					}
+	   	  				
+	   				
+					break;
+					
+    			}
+    			
+    			if(send_end && !data_size)
+				{
+					close(datafd);
+					fclose(fp);
+					return 0;
+				}
+		}    	
+    
+	}
+	else if(is_PASV)
+	{
+	
+		struct sockaddr_in addr;	
+		//创建数据套接字
+		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		{
+			printf("Error socket(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			fclose(fp);
+			return -1;
+    	}
+
+		//设置协议地址
+		memset(&addr, 0, sizeof(addr));
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(PASV_port);
+		addr.sin_addr.s_addr = inet_addr(PASV_ip);
+
+		// 在套接字上创建连接
+		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
+		{
+       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+       		close(sockfd);
+       		close(datafd);
+       		fclose(fp);
+			return -1;
+    	}
+    	
+		//select进行接口判断
+		while(1)
+		{
+    		//清空集合
+   			FD_ZERO(&rfds);
+   			FD_ZERO(&wfds);
+   			//添加描述符 
+			FD_SET(filefd,&rfds); 
+			FD_SET(sockfd,&rfds); 
+			FD_SET(datafd,&wfds); 
+			//描述符最大值加1 
+			maxfd=datafd>filefd?datafd+1:filefd+1; 
+			maxfd=maxfd>(sockfd+1)?maxfd:(sockfd+1);
+	
+			
+			//使用select判断状态
+			switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
+			{
+				case -1:
+					fclose(fp);
+					close(datafd);
+					return 1;
+					break;
+				case 0:
+					break;
+				default:
+					//如果控制套接字可读
+					if(FD_ISSET(sockfd, &rfds))
+    				{
+    					//读套接字传来的内容
+						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
+						{
+							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
+							close(datafd);
+							close(sockfd);
+							fclose(fp);
+							return -1;
+						}
+		
+						buffer[len]='\0';							
+						
+						prompt[0] = buffer;
+						for(int i=0;;i++)
+						{
+							prompt[i] = strtok_r(prompt[i], "\n\r", &prompt[i+1]);
+							if(!prompt[i])
+								break;
+							printf(">>>> %s\n\r", prompt[i]);
+							
+							ch = strtok(prompt[i]," ");
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							{
+								close(datafd);
+								fclose(fp);
+								return 1;
+							}
+							else if(!strcmp(ch,"226"))
+							{
+								send_end = 1;
+							}
+
+						}
+						
+    				}
+    				
+					//如果接口可写且文件可读
+					if(FD_ISSET(datafd, &wfds) && FD_ISSET(filefd, &rfds))
+					{
+
+						//读文件内容
+						data_size = fread(data, 1, MAX_SIZE, fp);
+					
+						if (data_size < 0) 
+						{
+							fclose(fp);
+							close(datafd);
+							return 1;
+						}
+								
+						//写入接口
+						if (send_data(datafd, data, data_size) < 0) 
+						{
+							fclose(fp);
+							close(datafd);
+							return 1;
+						}
+						
+					}
+	   				
+					break;
+					
+    			}
+    			
+    			if(send_end && !data_size)
+				{
+					close(datafd);
+					fclose(fp);
+					return 0;
+				}
+		}    	
+    		
+	}
+	else
+	{
+		int len = 0;
+		if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
+		{
+			printf("Error recv(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			return -1;
+		}
+		
+		buffer[len]='\0';			
+		printf(">>>> %s", buffer);
+		fclose(fp);
+		return 1;
+	}
+	
+	return 0;
+}
 
 int main(int argc, char **argv) 
 {

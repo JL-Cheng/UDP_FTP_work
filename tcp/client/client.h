@@ -54,6 +54,9 @@ int client_pasv(int sockfd,char *buffer,char *ip,int *port);
 //客户端RETR命令控制函数
 int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,char * PASV_ip,int PASV_port);
 
+//客户端STOR命令控制函数
+int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,char * PASV_ip,int PASV_port);
+
 
 /* =============================================
  * 基础处理函数
@@ -64,6 +67,9 @@ int create_socket(int port);
 
 //处理套接字接受请求
 int accept_socket(int listenfd);
+
+//发送数据
+int send_data(int sockfd,char *buf,int bufsize);
 
 //从命令行中读取输入
 int get_input(char* buffer, int size,char *cmd,char *param);
