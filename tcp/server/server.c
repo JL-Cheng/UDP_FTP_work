@@ -102,6 +102,7 @@ int receive_cmd(int sockfd,char * cmd,char *param)
 		printf("Error recv(): %s(%d)\n", strerror(errno), errno);
 		return -1;
 	}
+	strtok(buffer,"\r\n");
 	
 	//判断cmd的合法性
 	cmd_t = strtok(buffer, " ");
@@ -267,6 +268,8 @@ int server_work(int argc,char **argv)
 	int listenfd,controlfd;
 	int pid = 1;
 	
+	memset(FILE_ROOT,0,200);
+	strcpy(FILE_ROOT,DEFAULT_ROOT);
 	//处理控制台输入参数
 	for(int i=1;i<argc;i++)
 	{
@@ -276,7 +279,7 @@ int server_work(int argc,char **argv)
 		}
 		else if(!strcmp(argv[i],"-root"))
 		{
-			FILE_ROOT=argv[++i];
+			strcpy(FILE_ROOT,argv[++i]);
 		}
 		else
 		{
@@ -341,6 +344,8 @@ void server_process(int controlfd)
 	
 	char prompt1[] = "220 Anonymous FTP server ready.\r\n";
 	char prompt2[] = "502 Please use valid command.\r\n";
+	char prompt3[] = "215 UNIX Type: L8.\r\n";
+	char prompt4[] = "221 Goodbye.\r\n";
 
 	//首先返回成功连接信号
 	printf("success_connect\n");
@@ -435,7 +440,38 @@ void server_process(int controlfd)
 				PASV_listenfd=-1;
 			}
 			continue;
-		}		
+		}
+		//若是SYST指令
+		else if(!(strcmp(cmd,"SYST")))
+		{
+			send_data(controlfd,prompt3,strlen(prompt3));
+			continue;
+		}	
+		//若是TYPE指令
+		else if(!(strcmp(cmd,"TYPE")))
+		{
+			server_type(controlfd,param);
+			continue;
+		}	
+		//若是QUIT指令
+		else if(!(strcmp(cmd,"QUIT")))
+		{
+			send_data(controlfd,prompt4,strlen(prompt4));
+			close(controlfd);
+			return;
+		}	
+		//若是MKD指令
+		else if(!(strcmp(cmd,"MKD")))
+		{
+			server_mkd(controlfd,param);
+			continue;
+		}	
+		//若是CWD指令
+		else if(!(strcmp(cmd,"CWD")))
+		{
+			server_cwd(controlfd,param);
+			continue;
+		}	
 		//若是其他命令
 		else
 		{
@@ -500,6 +536,125 @@ void server_login(int controlfd)
 	return;
 }
 
+/* 函数功能：服务器TYPE命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：type命令参数
+ * 返回值：无。
+ */
+void server_type(int controlfd,char *param)
+{
+	char prompt1[] = "200 Type set to I.\r\n";
+	char prompt2[] = "504 Command not implemented for that parameter.\r\n";
+	if(!(strcmp(param,"I")))
+	{
+		send_data(controlfd,prompt1,strlen(prompt1));
+	}
+	else
+	{
+		send_data(controlfd,prompt2,strlen(prompt2));
+	}
+}
+
+/* 函数功能：服务器MKD命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：type命令参数
+ * 返回值：无。
+ */
+void server_mkd(int controlfd,char *param)
+{
+	char directory[200];
+	int len = 0;
+	struct stat buf; 
+	
+	char prompt1[300];
+	char prompt2[] = "550 Make directory failed.\r\n";
+	
+	//生成路径
+	memset(directory,0,200);
+	strcpy(directory,FILE_ROOT);
+	if(directory[strlen(directory)-1]!='/' && param[0]!='/')
+		directory[strlen(directory)]='/';
+	else if(directory[strlen(directory)-1]=='/' && param[0]=='/')
+		directory[strlen(directory)-1]='\0';
+	strcat(directory,param);		
+	printf("directory:%s\n",directory);
+	  
+    len=strlen(directory);
+    for(int i=1; i<len; i++ )
+    {
+        if( directory[i]=='/' )
+        {
+            directory[i] = '\0';
+            if(access(directory,0)!=0)
+            {
+                mkdir(directory, 0777);
+            }
+            directory[i]='/';
+        }
+    }
+    if(len>0 && access(directory,0)!=0 )
+    {
+        mkdir(directory, 0777 );
+    }
+    
+	 
+	stat(directory, &buf ); 
+	if(S_IFDIR & buf.st_mode)//是目录
+	{ 
+		printf("folder\n"); 
+		sprintf(prompt1,"257 %s Created.\r\n",directory);
+    	send_data(controlfd,prompt1,strlen(prompt1));
+	}
+	else if(S_IFREG & buf.st_mode)//是文件
+	{ 
+		printf("file\n"); 
+		send_data(controlfd,prompt2,strlen(prompt2));
+	} 
+     
+    return;
+
+}
+
+/* 函数功能：服务器CWD命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：type命令参数
+ * 返回值：无。
+ */
+void server_cwd(int controlfd,char *param)
+{
+	char directory[200];
+	struct stat buf; 
+	
+	char prompt1[] = "250 Okay.\r\n";
+	char prompt2[300];
+	
+	//生成路径
+	memset(directory,0,200);
+	if(param[0]!='/')
+		directory[0]='/';
+	strcat(directory,param);		
+	printf("directory:%s\n",directory);
+	  
+	if(access(directory,0)==0)
+	{
+		stat(directory, &buf);
+		if(S_IFDIR & buf.st_mode)//是目录
+		{ 			
+			memset(FILE_ROOT,0,200);
+			strcpy(FILE_ROOT,directory);
+			send_data(controlfd,prompt1,strlen(prompt1));
+			return;
+		}
+	}
+	
+	sprintf(prompt2,"550 %s: No such file or directory.\r\n",directory);
+	send_data(controlfd,prompt2,strlen(prompt2));  
+	   
+    return;
+}
 
 /* 函数功能：服务器PORT命令的控制函数
  * 传入参数：
@@ -604,12 +759,10 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
 	char prompt2[] = "425 Can't open data connection.\r\n";
 	char prompt3[] = "550 Requested file action not taken.\r\n";
-	char prompt4[] = "150 File status okay; about to open data connection.\r\n";
+	char prompt4[] = "150 Data connection already open; transfer starting.\r\n";
 	char prompt5[] = "451 Requested action aborted: local error in processing.\r\n";
 	char prompt6[] = "426 Connection closed; transfer aborted.\r\n";
-	char prompt7[] = "125 Data connection already open; transfer starting.\r\n";
-	char prompt8[] = "250 Requested file action okay, completed.\r\n";
-	char prompt9[] = "226 Closing data connection.\r\n";
+	char prompt7[] = "226 Closing data connection.\r\n";
 	
 	int datafd = -1;
 	int filefd = -1;	
@@ -630,9 +783,9 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	// 打开文件
 	memset(filename,0,200);
 	strcpy(filename,FILE_ROOT);
-	if(filename[strlen(filename)-1]!='/' && param[strlen(param)-1]!='/')
+	if(filename[strlen(filename)-1]!='/' && param[0]!='/')
 		filename[strlen(filename)]='/';
-	else if(filename[strlen(filename)-1]=='/' && param[strlen(param)-1]=='/')
+	else if(filename[strlen(filename)-1]=='/' && param[0]=='/')
 		filename[strlen(filename)-1]='\0';
 	strcat(filename,param);		
 	printf("filename:%s\n",filename);						
@@ -642,7 +795,6 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		send_data(controlfd,prompt3,strlen(prompt3));
 		return -1;
 	}		
-	send_data(controlfd,prompt4,strlen(prompt4));
 	filefd = fileno(fp);		
 	
 	//建立数据连接
@@ -675,7 +827,7 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			return -1;
     	}
     	
-    	send_data(controlfd,prompt7,strlen(prompt7));
+ 		send_data(controlfd,prompt4,strlen(prompt4));
     	
 	}
 	else
@@ -699,7 +851,7 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			fclose(fp);
 			return -1;
 		}
-		send_data(controlfd,prompt7,strlen(prompt7));
+		send_data(controlfd,prompt4,strlen(prompt4));
 	
 	}
 	
@@ -758,14 +910,10 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 				break;
 		}
    	}while(num_read > 0);
-    	
-   	send_data(controlfd,prompt8,strlen(prompt8));
    	
-   	close(datafd);
-   	
-   	send_data(controlfd,prompt9,strlen(prompt9));
-   	
-   	fclose(fp);
+	send_data(controlfd,prompt7,strlen(prompt7));
+	close(datafd);
+	fclose(fp);
 	
 	return 0;
 }
@@ -786,12 +934,10 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
 	char prompt2[] = "425 Can't open data connection.\r\n";
 	char prompt3[] = "550 Requested file action not taken.\r\n";
-	char prompt4[] = "150 File status okay; about to open data connection.\r\n";
+	char prompt4[] = "150 Data connection already open; transfer starting.\r\n";
 	char prompt5[] = "451 Requested action aborted: local error in processing.\r\n";
 	char prompt6[] = "426 Connection closed; transfer aborted.\r\n";
-	char prompt7[] = "125 Data connection already open; transfer starting.\r\n";
-	char prompt8[] = "250 Requested file action okay, completed.\r\n";
-	char prompt9[] = "226 Closing data connection.\r\n";
+	char prompt7[] = "226 Closing data connection.\r\n";
 	
 	int datafd = -1;
 	int filefd = -1;	
@@ -828,7 +974,6 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		send_data(controlfd,prompt3,strlen(prompt3));
 		return -1;
 	}		
-	send_data(controlfd,prompt4,strlen(prompt4));
 	filefd = fileno(fp);		
 	
 	//建立数据连接
@@ -861,7 +1006,7 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			return -1;
     	}
     	
-    	send_data(controlfd,prompt7,strlen(prompt7));
+    	send_data(controlfd,prompt4,strlen(prompt4));
     	
 	}
 	else
@@ -885,7 +1030,7 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			fclose(fp);
 			return -1;
 		}
-		send_data(controlfd,prompt7,strlen(prompt7));
+		send_data(controlfd,prompt4,strlen(prompt4));
 	
 	}
 	
@@ -946,12 +1091,11 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		}
    	}while(num_read!=0);
     
-   	send_data(controlfd,prompt8,strlen(prompt8));
    	
+  
+   	
+   	send_data(controlfd,prompt7,strlen(prompt7));
    	close(datafd);
-   	
-   	send_data(controlfd,prompt9,strlen(prompt9));
-   	
    	fclose(fp);
 	
 	return 0;	

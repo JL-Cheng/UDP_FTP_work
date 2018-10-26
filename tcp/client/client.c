@@ -448,7 +448,10 @@ int client_work(int argc,char **argv)
 		buffer[len]='\0';
 			
 		printf(">>>> %s", buffer);
-
+		
+		ch = strtok(buffer," ");
+		if(!strcmp(ch,"221"))
+			break;
 	} // 循环得到更多的用户输入
  
     close(sockfd);
@@ -680,7 +683,7 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 								fclose(fp);
 								return 1;
 							}
-							else if(!strcmp(ch,"125"))
+							else if(!strcmp(ch,"150"))
 							{
 								server_data_connect = 1;
 							}
@@ -1038,7 +1041,7 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 								fclose(fp);
 								return 1;
 							}
-							else if(!strcmp(ch,"125"))
+							else if(!strcmp(ch,"150"))
 							{
 								server_data_connect = 1;
 							}

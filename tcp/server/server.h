@@ -17,6 +17,8 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 /* =============================================
  * 一些宏定义或全局数据
@@ -39,7 +41,7 @@ char *CLIENT_INSTRUCTION[]=
 	"RNFR", "RNTO" 
 };
 int PORT = DEFAULT_PORT;
-char *FILE_ROOT = DEFAULT_ROOT;
+char FILE_ROOT[200];
 
 /* =============================================
  * 服务器相关函数
@@ -54,6 +56,15 @@ void server_process(int controlfd);
 
 //服务器控制用户登录
 void server_login(int controlfd);
+
+//服务器TYPE命令控制函数
+void server_type(int controlfd,char *param);
+
+//服务器MKD命令控制函数
+void server_mkd(int controlfd,char *param);
+
+//服务器CWD命令控制函数
+void server_cwd(int controlfd,char *param);
 
 //服务器PORT命令的控制函数
 int server_port(int controlfd,char *param,char *ip,int *port);
