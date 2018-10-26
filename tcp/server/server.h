@@ -57,14 +57,26 @@ void server_process(int controlfd);
 //服务器控制用户登录
 void server_login(int controlfd);
 
+//服务器RNFR命令控制函数
+int server_rnfr(int controlfd,char *param,char *filename);
+
+//服务器RNTO命令控制函数
+void server_rnto(int controlfd,char *param,char *filename,int is_RNFR);
+
 //服务器TYPE命令控制函数
 void server_type(int controlfd,char *param);
 
 //服务器MKD命令控制函数
 void server_mkd(int controlfd,char *param);
 
+//服务器RMD命令控制函数
+void server_rmd(int controlfd,char *param);
+
 //服务器CWD命令控制函数
 void server_cwd(int controlfd,char *param);
+
+//服务器PWD命令控制函数
+void server_pwd(int controlfd,char *param);
 
 //服务器PORT命令的控制函数
 int server_port(int controlfd,char *param,char *ip,int *port);
@@ -77,6 +89,9 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 
 //服务器STOR命令控制函数
 int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd);
+
+//服务器LIST命令控制函数
+int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd);
 
 
 

@@ -12,4 +12,3 @@ $(OBJS) : %.o : %.c
 .PHONY:
 clean:
 	@rm -rf *.o server
-	@echo Done cleaning	

@@ -337,6 +337,8 @@ void server_process(int controlfd)
 	int PORT_port = 0;//PORT指令数据传输端口
 	int is_PORT = 0;//使用PORT命令主动传输
 	int is_PASV = 0;//使用PASV命令被动传输
+	char filename[200];//文件名
+	int is_RNFR = 0;//正处于文件重命名阶段
 	
 	int flag;//状态参数
 	char cmd[5];//客户端命令（verb）
@@ -344,7 +346,7 @@ void server_process(int controlfd)
 	
 	char prompt1[] = "220 Anonymous FTP server ready.\r\n";
 	char prompt2[] = "502 Please use valid command.\r\n";
-	char prompt3[] = "215 UNIX Type: L8.\r\n";
+	char prompt3[] = "215 UNIX Type: L8\r\n";
 	char prompt4[] = "221 Goodbye.\r\n";
 
 	//首先返回成功连接信号
@@ -361,6 +363,8 @@ void server_process(int controlfd)
 	{
 		if(receive_cmd(controlfd,cmd,param))
 			continue;
+		if(is_RNFR && strcmp(cmd,"RNTO"))
+			is_RNFR = 0;
 		//若是PORT指令
 		if(!(strcmp(cmd,"PORT")))
 		{
@@ -441,6 +445,39 @@ void server_process(int controlfd)
 			}
 			continue;
 		}
+		//若是LIST指令
+		else if(!(strcmp(cmd,"LIST")))
+		{
+			if(server_list(controlfd,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd))
+			{
+				printf("Send list wrong.\n");
+			}
+			if(is_PORT)
+			{
+				is_PORT=0;
+				memset(PORT_ip, 0, 20);
+				PORT_port = 0;				
+			}
+			else if(is_PASV)
+			{	
+				is_PASV=0;
+				PASV_listenfd=-1;
+			}
+			continue;
+		}
+		//若是RNFR指令
+		else if(!(strcmp(cmd,"RNFR")))
+		{
+			if(!server_rnfr(controlfd,param,filename))
+				is_RNFR = 1;
+			continue;
+		}
+		//若是RNTO指令
+		else if(!(strcmp(cmd,"RNTO")))
+		{
+			server_rnto(controlfd,param,filename,is_RNFR);
+			continue;
+		}
 		//若是SYST指令
 		else if(!(strcmp(cmd,"SYST")))
 		{
@@ -466,12 +503,24 @@ void server_process(int controlfd)
 			server_mkd(controlfd,param);
 			continue;
 		}	
+		//若是RMD指令
+		else if(!(strcmp(cmd,"RMD")))
+		{
+			server_rmd(controlfd,param);
+			continue;
+		}	
 		//若是CWD指令
 		else if(!(strcmp(cmd,"CWD")))
 		{
 			server_cwd(controlfd,param);
 			continue;
-		}	
+		}
+		//若是PWD指令
+		else if(!(strcmp(cmd,"PWD")))
+		{
+			server_pwd(controlfd,param);
+			continue;
+		}
 		//若是其他命令
 		else
 		{
@@ -536,6 +585,89 @@ void server_login(int controlfd)
 	return;
 }
 
+/* 函数功能：服务器RNFR命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：文件地址
+ * -filename：旧文件名
+ * 返回值：成功返回0,否则返回-1。
+ */
+int server_rnfr(int controlfd,char *param,char *filename)
+{
+	struct stat buf; 
+	
+	char prompt1[200];
+	char prompt2[] = "450 Requested file action not taken.\r\n";
+	
+	//生成路径
+	memset(filename,0,200);
+	strcpy(filename,FILE_ROOT);
+	if(filename[strlen(filename)-1]!='/' && param[0]!='/')
+		filename[strlen(filename)]='/';
+	else if(filename[strlen(filename)-1]=='/' && param[0]=='/')
+		filename[strlen(filename)-1]='\0';
+	strcat(filename,param);		
+	printf("filename:%s\n",filename);    
+	 
+	stat(filename, &buf); 
+	if(S_IFREG & buf.st_mode)//是文件
+	{ 
+		sprintf(prompt1,"350 %s can be renamed.\r\n",filename);
+    	send_data(controlfd,prompt1,strlen(prompt1));
+    	return 0;
+	}
+
+    send_data(controlfd,prompt2,strlen(prompt2));
+    return -1;
+}
+
+/* 函数功能：服务器RNTO命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：文件地址
+ * -filename：旧文件名
+ * -is_RNFR：是否在RNFR命令之后
+ * 返回值：无。
+ */
+void server_rnto(int controlfd,char *param,char *filename,int is_RNFR)
+{
+
+	char prompt1[200];
+	char prompt2[] = "503 Please use 'RNFR' first.\r\n";
+	
+	char new_filename[200];
+	
+	if(!is_RNFR)
+	{
+		send_data(controlfd,prompt2,strlen(prompt2));
+    	return;
+	}
+	
+	//新文件路径
+	memset(new_filename,0,200);
+	strcpy(new_filename,FILE_ROOT);
+	if(new_filename[strlen(new_filename)-1]!='/' && param[0]!='/')
+		new_filename[strlen(new_filename)]='/';
+	else if(new_filename[strlen(new_filename)-1]=='/' && param[0]=='/')
+		new_filename[strlen(new_filename)-1]='\0';
+	strcat(new_filename,param);		
+	printf("new_filename:%s\n",new_filename);
+	
+	if(!(rename(filename,new_filename)))
+	{
+		sprintf(prompt1,"250 %s is successfully renamed to %s.\r\n",filename,new_filename);
+    	send_data(controlfd,prompt1,strlen(prompt1));
+    	return;
+	}
+	else
+	{
+		sprintf(prompt1,"550 Renaming %s failed.\r\n",filename);
+    	send_data(controlfd,prompt1,strlen(prompt1));
+    	return;
+	}
+	
+}
+
 /* 函数功能：服务器TYPE命令的控制函数
  * 传入参数：
  * -controlfd：控制套接字
@@ -559,7 +691,7 @@ void server_type(int controlfd,char *param)
 /* 函数功能：服务器MKD命令的控制函数
  * 传入参数：
  * -controlfd：控制套接字
- * -param：type命令参数
+ * -param：命令参数
  * 返回值：无。
  */
 void server_mkd(int controlfd,char *param)
@@ -617,10 +749,45 @@ void server_mkd(int controlfd,char *param)
 
 }
 
+/* 函数功能：服务器RMD命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：命令参数
+ * 返回值：无。
+ */
+void server_rmd(int controlfd,char *param)
+{
+	char directory[200];
+	
+	char prompt1[300];
+	char prompt2[] = "550 Remove directory failed.\r\n";
+	
+	//生成路径
+	memset(directory,0,200);
+	strcpy(directory,FILE_ROOT);
+	if(directory[strlen(directory)-1]!='/' && param[0]!='/')
+		directory[strlen(directory)]='/';
+	else if(directory[strlen(directory)-1]=='/' && param[0]=='/')
+		directory[strlen(directory)-1]='\0';
+	strcat(directory,param);		
+	printf("directory:%s\n",directory);
+	  
+    if(!rmdir(directory))
+    {
+    	sprintf(prompt1,"250 %s Removed.\r\n",directory);
+    	send_data(controlfd,prompt1,strlen(prompt1));
+    }
+    else
+    	send_data(controlfd,prompt2,strlen(prompt2));
+     
+    return;
+
+}
+
 /* 函数功能：服务器CWD命令的控制函数
  * 传入参数：
  * -controlfd：控制套接字
- * -param：type命令参数
+ * -param：命令参数
  * 返回值：无。
  */
 void server_cwd(int controlfd,char *param)
@@ -652,6 +819,22 @@ void server_cwd(int controlfd,char *param)
 	
 	sprintf(prompt2,"550 %s: No such file or directory.\r\n",directory);
 	send_data(controlfd,prompt2,strlen(prompt2));  
+	   
+    return;
+}
+
+/* 函数功能：服务器PWD命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -param：命令参数
+ * 返回值：无。
+ */
+void server_pwd(int controlfd,char *param)
+{
+
+	char prompt1[300];
+	sprintf(prompt1,"257 Current working directory:%s.\r\n",FILE_ROOT);
+	send_data(controlfd,prompt1,strlen(prompt1));  
 	   
     return;
 }
@@ -1091,14 +1274,189 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		}
    	}while(num_read!=0);
     
-   	
-  
-   	
    	send_data(controlfd,prompt7,strlen(prompt7));
    	close(datafd);
    	fclose(fp);
 	
 	return 0;	
+}
+
+/* 函数功能：服务器LIST命令的控制函数
+ * 传入参数：
+ * -controlfd：控制套接字
+ * -is_PORT：是否为PORT连接形式
+ * -PORT_ip：PORT连接的地址
+ * -PORT_port：PORT连接的端口
+ * -is_PASV：是否为PASV连接形式
+ * -PASV_listenfd：PASV监听端口
+ * 返回值：正确返回0,否则返回-1。
+ */
+int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd)
+{
+	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
+	char prompt2[] = "425 Can't open data connection.\r\n";
+	char prompt3[] = "550 Requested file action not taken.\r\n";
+	char prompt4[] = "150 Data connection already open; transfer starting.\r\n";
+	char prompt5[] = "451 Requested action aborted: local error in processing.\r\n";
+	char prompt6[] = "426 Connection closed; transfer aborted.\r\n";
+	char prompt7[] = "226 Closing data connection.\r\n";
+	
+	int datafd = -1;
+	int filefd = -1;	
+	FILE* fp = NULL;
+	char data[MAX_SIZE];
+	char sys_command[100];
+	char filename[100];
+	int num_read;
+	fd_set rfds,wfds; //读写文件句柄
+	struct timeval timeout={3,0}; //select等待3秒
+	int maxfd = 0;
+	
+	//若没有建立连接
+	if(!is_PORT && !is_PASV)
+	{
+		send_data(controlfd,prompt1,strlen(prompt1));
+		return -1;
+	}
+	//执行命令并打开文件
+	sprintf(sys_command,"cd %s && ls > tmp.txt",FILE_ROOT);
+	if (system(sys_command) < 0)
+	{
+		send_data(controlfd,prompt3,strlen(prompt3));
+		return -1;
+	}	
+	strcpy(filename,FILE_ROOT);
+	if(filename[strlen(filename)-1]!='/')
+		strcat(filename,"/");
+	strcat(filename,"tmp.txt");		
+	printf("filename:%s\n",filename);						
+	fp = fopen(filename, "rb"); 
+	if (!fp)
+	{
+		send_data(controlfd,prompt3,strlen(prompt3));
+		return -1;
+	}		
+	filefd = fileno(fp);		
+	
+	//建立数据连接
+	if(is_PORT)
+	{
+		struct sockaddr_in addr;	
+	
+		//创建数据套接字
+		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		{
+			printf("Error socket(): %s(%d)\n", strerror(errno), errno);
+			send_data(controlfd,prompt2,strlen(prompt2));
+			fclose(fp);
+			return -1;
+    	}
+
+		//设置协议地址
+		memset(&addr, 0, sizeof(addr));
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(PORT_port);
+		addr.sin_addr.s_addr = inet_addr(PORT_ip);
+
+		// 在套接字上创建连接
+		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
+		{
+       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+       		send_data(controlfd,prompt2,strlen(prompt2));
+       		close(datafd);
+       		fclose(fp);
+			return -1;
+    	}
+    	
+ 		send_data(controlfd,prompt4,strlen(prompt4));
+    	
+	}
+	else
+	{
+		//设置6s超时
+		struct timeval accept_timeout = {6,0};  
+		if (setsockopt(PASV_listenfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&accept_timeout, sizeof(struct timeval)) < 0)  
+		{  
+			printf("Error setsockopt(): %s(%d)\n", strerror(errno), errno);
+			send_data(controlfd,prompt2,strlen(prompt2));
+			close(PASV_listenfd);
+			fclose(fp);
+			return -1;  
+		}  
+		datafd = accept_socket(PASV_listenfd);
+		if(datafd<0)
+		{
+			printf("Create datafd error.\n");
+			send_data(controlfd,prompt2,strlen(prompt2));
+			close(PASV_listenfd);
+			fclose(fp);
+			return -1;
+		}
+		send_data(controlfd,prompt4,strlen(prompt4));
+	
+	}
+	
+	//传输数据
+   	do
+   	{
+   		//清空集合
+   		FD_ZERO(&rfds);
+   		FD_ZERO(&wfds);
+   		//添加描述符 
+		FD_SET(datafd,&wfds); 
+		FD_SET(filefd,&rfds); 
+		//描述符最大值加1 
+		maxfd=datafd>filefd?datafd+1:filefd+1; 
+			
+		//使用select判断状态
+		switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
+		{
+			case -1:
+				send_data(controlfd,prompt5,strlen(prompt5));
+				close(datafd);
+				fclose(fp);
+				return -1;
+				break;
+			case 0:
+				break;
+			default:
+				//如果文件可读
+				if(FD_ISSET(filefd, &rfds))
+    			{
+    				//读文件内容
+					num_read = fread(data, 1, MAX_SIZE, fp);
+					printf("num_read:%d\n",num_read);
+					if (num_read < 0) 
+					{
+						send_data(controlfd,prompt5,strlen(prompt5));
+						close(datafd);
+						fclose(fp);
+						return -1;
+					}
+						
+					//如果接口可写
+					if(FD_ISSET(datafd, &wfds))
+					{
+						//写入接口
+						if (send_data(datafd, data, num_read) < 0) 
+						{
+							send_data(controlfd,prompt6,strlen(prompt6));
+							close(datafd);
+							fclose(fp);
+							return -1;
+						}
+					}
+   				}
+    				
+				break;
+		}
+   	}while(num_read > 0);
+   	
+	send_data(controlfd,prompt7,strlen(prompt7));
+	close(datafd);
+	fclose(fp);
+	
+	return 0;
 }
 
 int main(int argc, char **argv) {

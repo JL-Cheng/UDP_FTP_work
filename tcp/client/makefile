@@ -11,5 +11,4 @@ $(OBJS) : %.o : %.c
 
 .PHONY:
 clean:
-	@rm -rf *.o client
-	@echo Done cleaning	
+	@rm -rf *.o client	

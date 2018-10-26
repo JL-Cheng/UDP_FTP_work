@@ -57,6 +57,9 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 //客户端STOR命令控制函数
 int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,char * PASV_ip,int PASV_port);
 
+//客户端LIST命令控制函数
+int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,char * PASV_ip,int PASV_port);
+
 
 /* =============================================
  * 基础处理函数
