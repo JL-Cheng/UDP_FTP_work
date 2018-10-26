@@ -89,8 +89,8 @@ int receive_cmd(int sockfd,char * cmd,char *param)
 	char *param_t = 0;
 	int cmd_valid = 0;
 
-	char prompt1[] = "500 Syntax error, command unrecognized.\n\r";
-	char prompt2[] = "501 Syntax error in parameters.\n\r";
+	char prompt1[] = "500 Syntax error, command unrecognized.\r\n";
+	char prompt2[] = "501 Syntax error in parameters.\r\n";
 
 	memset(buffer, 0, MAX_SIZE);
 	memset(cmd,0,5);
@@ -125,7 +125,9 @@ int receive_cmd(int sockfd,char * cmd,char *param)
 	}
 	
 	//判断param合法性
-	param_t = strtok(NULL, " ");
+	param_t = strtok(NULL, "\r");
+	if(param_t && param_t[strlen(param_t)-1] == '\n')
+		param_t[strlen(param_t)-1]='\0';
 	if(param_t && (strlen(param_t) >= MAX_SIZE))
 	{
 		printf("Syntax error in parameters!\n");
@@ -136,7 +138,7 @@ int receive_cmd(int sockfd,char * cmd,char *param)
 	strcpy(cmd,cmd_t);
 	if(param_t)
 		strcpy(param,param_t);
-		
+
 	return 0;
 }
 
@@ -337,8 +339,8 @@ void server_process(int controlfd)
 	char cmd[5];//客户端命令（verb）
 	char param[MAX_SIZE];//客户端命令参数
 	
-	char prompt1[] = "220 Anonymous FTP server ready.\n\r";
-	char prompt2[] = "502 Please use valid command.\n\r";
+	char prompt1[] = "220 Anonymous FTP server ready.\r\n";
+	char prompt2[] = "502 Please use valid command.\r\n";
 
 	//首先返回成功连接信号
 	printf("success_connect\n");
@@ -455,18 +457,20 @@ void server_login(int controlfd)
 	char param[MAX_SIZE];//客户端命令参数
 	int user_ok = 0;//用户名是否正确
 	
-	char prompt1[] = "530 Please use 'USER' command to login first.\n\r";
-	char prompt2[] = "332 Please enter correct username.\n\r";
-	char prompt3[] = "331 User name is ok, send your email address as password.\n\r";
-	char prompt4[] = "230 Guest login ok, now you can do what you want.\n\r";
+	char prompt1[] = "530 Please use 'USER' command to login first.\r\n";
+	char prompt2[] = "332 Please enter correct username.\r\n";
+	char prompt3[] = "331 User name is ok, send your email address as password.\r\n";
+	char prompt4[] = "230 Guest login ok, now you can do what you want.\r\n";
 	
 	while(1)
 	{
 		if(receive_cmd(controlfd,cmd,param))
 			continue;
+		
 		//首先必须是USER指令
 		if(!(strcmp(cmd,"USER")) && !user_ok)
 		{
+			
 			if(!(strcmp(param,"anonymous")))
 			{
 				send_data(controlfd,prompt3,strlen(prompt3));
@@ -508,8 +512,8 @@ void server_login(int controlfd)
 int server_port(int controlfd,char *param,char *ip,int *port)
 {
 
-	char prompt1[] = "501 Syntax error in parameters or arguments.\n\r";
-	char prompt2[] = "200 PORT command is ok.\n\r";
+	char prompt1[] = "501 Syntax error in parameters or arguments.\r\n";
+	char prompt2[] = "200 PORT command is ok.\r\n";
 	
 	if(get_ip_port(param,ip,port)<0)
 	{
@@ -531,7 +535,7 @@ int server_port(int controlfd,char *param,char *ip,int *port)
 int server_pasv(int controlfd)
 {
 	char prompt1[50] = "227 Entering Passive Mode ";
-	char prompt2[] = "421 Service not available, closing control connection.\n\r";
+	char prompt2[] = "421 Service not available, closing control connection.\r\n";
 	
 	int port = 0;
 	char ip[20];
@@ -577,7 +581,7 @@ int server_pasv(int controlfd)
 	sprintf(p, "%d", port % 256); 
 	strcat(prompt1,",");
 	strcat(prompt1,p);
-	strcat(prompt1,")\n\r");
+	strcat(prompt1,")\r\n");
 	
 	send_data(controlfd,prompt1,strlen(prompt1));
 	
@@ -597,15 +601,15 @@ int server_pasv(int controlfd)
  */
 int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd)
 {
-	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\n\r";
-	char prompt2[] = "425 Can't open data connection.\n\r";
-	char prompt3[] = "550 Requested file action not taken.\n\r";
-	char prompt4[] = "150 File status okay; about to open data connection.\n\r";
-	char prompt5[] = "451 Requested action aborted: local error in processing.\n\r";
-	char prompt6[] = "426 Connection closed; transfer aborted.\n\r";
-	char prompt7[] = "125 Data connection already open; transfer starting.\n\r";
-	char prompt8[] = "250 Requested file action okay, completed.\n\r";
-	char prompt9[] = "226 Closing data connection.\n\r";
+	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
+	char prompt2[] = "425 Can't open data connection.\r\n";
+	char prompt3[] = "550 Requested file action not taken.\r\n";
+	char prompt4[] = "150 File status okay; about to open data connection.\r\n";
+	char prompt5[] = "451 Requested action aborted: local error in processing.\r\n";
+	char prompt6[] = "426 Connection closed; transfer aborted.\r\n";
+	char prompt7[] = "125 Data connection already open; transfer starting.\r\n";
+	char prompt8[] = "250 Requested file action okay, completed.\r\n";
+	char prompt9[] = "226 Closing data connection.\r\n";
 	
 	int datafd = -1;
 	int filefd = -1;	
@@ -617,9 +621,21 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	struct timeval timeout={3,0}; //select等待3秒
 	int maxfd = 0;
 	
+	//若没有建立连接
+	if(!is_PORT && !is_PASV)
+	{
+		send_data(controlfd,prompt1,strlen(prompt1));
+		return -1;
+	}
 	// 打开文件
+	memset(filename,0,200);
 	strcpy(filename,FILE_ROOT);
-	strcat(filename,param);								
+	if(filename[strlen(filename)-1]!='/' && param[strlen(param)-1]!='/')
+		filename[strlen(filename)]='/';
+	else if(filename[strlen(filename)-1]=='/' && param[strlen(param)-1]=='/')
+		filename[strlen(filename)-1]='\0';
+	strcat(filename,param);		
+	printf("filename:%s\n",filename);						
 	fp = fopen(filename, "rb"); 
 	if (!fp)
 	{
@@ -662,7 +678,7 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
     	send_data(controlfd,prompt7,strlen(prompt7));
     	
 	}
-	else if(is_PASV)
+	else
 	{
 		//设置6s超时
 		struct timeval accept_timeout = {6,0};  
@@ -685,12 +701,6 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		}
 		send_data(controlfd,prompt7,strlen(prompt7));
 	
-	}
-	else
-	{
-		fclose(fp);
-		send_data(controlfd,prompt1,strlen(prompt1));
-		return -1;
 	}
 	
 	//传输数据
@@ -773,15 +783,15 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
  */
 int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd)
 {
-	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\n\r";
-	char prompt2[] = "425 Can't open data connection.\n\r";
-	char prompt3[] = "550 Requested file action not taken.\n\r";
-	char prompt4[] = "150 File status okay; about to open data connection.\n\r";
-	char prompt5[] = "451 Requested action aborted: local error in processing.\n\r";
-	char prompt6[] = "426 Connection closed; transfer aborted.\n\r";
-	char prompt7[] = "125 Data connection already open; transfer starting.\n\r";
-	char prompt8[] = "250 Requested file action okay, completed.\n\r";
-	char prompt9[] = "226 Closing data connection.\n\r";
+	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
+	char prompt2[] = "425 Can't open data connection.\r\n";
+	char prompt3[] = "550 Requested file action not taken.\r\n";
+	char prompt4[] = "150 File status okay; about to open data connection.\r\n";
+	char prompt5[] = "451 Requested action aborted: local error in processing.\r\n";
+	char prompt6[] = "426 Connection closed; transfer aborted.\r\n";
+	char prompt7[] = "125 Data connection already open; transfer starting.\r\n";
+	char prompt8[] = "250 Requested file action okay, completed.\r\n";
+	char prompt9[] = "226 Closing data connection.\r\n";
 	
 	int datafd = -1;
 	int filefd = -1;	
@@ -794,6 +804,12 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	struct timeval timeout={3,0}; //select等待3秒
 	int maxfd = 0;
 	
+	//若无连接建立
+	if(!is_PORT && !is_PASV)
+	{
+		send_data(controlfd,prompt1,strlen(prompt1));
+		return -1;
+	}
 	//打开文件
 	ch = strtok(param,"/");
 	while(ch)
@@ -848,7 +864,7 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
     	send_data(controlfd,prompt7,strlen(prompt7));
     	
 	}
-	else if(is_PASV)
+	else
 	{
 		//设置6s超时
 		struct timeval accept_timeout = {6,0};  
@@ -871,12 +887,6 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		}
 		send_data(controlfd,prompt7,strlen(prompt7));
 	
-	}
-	else
-	{
-		fclose(fp);
-		send_data(controlfd,prompt1,strlen(prompt1));
-		return -1;
 	}
 	
 	//接收数据
@@ -934,7 +944,7 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
     				
 				break;
 		}
-   	}while(num_read == MAX_SIZE || num_read < 0);
+   	}while(num_read!=0);
     
    	send_data(controlfd,prompt8,strlen(prompt8));
    	

@@ -269,6 +269,7 @@ int client_work(int argc,char **argv)
 	char buffer[MAX_SIZE];
 	char cmd[5];
 	char param[MAX_SIZE];
+	char *ch;
     int sockfd = -1;
 	int len=0;
 	
@@ -314,6 +315,40 @@ int client_work(int argc,char **argv)
 	printf(">>>> %s", buffer);
 
 
+	//首先进行登录
+	while(1)
+	{
+		//获得输入
+		printf("fcp> ");
+		if(get_input(buffer,MAX_SIZE,cmd,param))
+			continue;
+			
+		//发送命令
+		if (send(sockfd, buffer, (int)strlen(buffer), 0) < 0 )
+		{
+			printf("Error send(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			return 1;
+		}
+	
+		//接收命令
+		if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
+		{
+			printf("Error recv(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			return 1;
+		}
+		
+		buffer[len]='\0';
+			
+		printf(">>>> %s", buffer);
+		
+		ch = strtok(buffer," ");
+		if(!strcmp(ch,"230"))
+			break;
+	}
+	
+	//开始登录后的操作
 	while (1) 
 	{
 		//获得输入
@@ -349,6 +384,9 @@ int client_work(int argc,char **argv)
 				close(sockfd);
 				return 1;
 			}
+			else if(flag == 2)
+				continue;
+			
 			if(is_PORT)
 			{
 				is_PORT=0;
@@ -372,6 +410,9 @@ int client_work(int argc,char **argv)
 				close(sockfd);
 				return 1;
 			}
+			else if(flag == 2)
+				continue;
+				
 			if(is_PORT)
 			{
 				is_PORT=0;
@@ -395,7 +436,8 @@ int client_work(int argc,char **argv)
 			close(sockfd);
 			return 1;
 		}
-
+		
+		//接收命令
 		if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
 		{
 			printf("Error recv(): %s(%d)\n", strerror(errno), errno);
@@ -462,7 +504,7 @@ int client_pasv(int sockfd,char *buffer,char *ip,int *port)
 	printf(">>>> %s", buffer);
 	
 	ch = strtok(buffer, " ");
-	if(!strcmp(ch,"421"))
+	if(strcmp(ch,"227"))
 	{
 		return -1;
 	}
@@ -488,7 +530,7 @@ int client_pasv(int sockfd,char *buffer,char *ip,int *port)
  * -is_PASV：是否为PASV连接形式
  * -PASV_ip：PASV连接的地址
  * -PASV_port：PASV连接的端口
- * 返回值：正确返回0,否则连接错误返回-1，参数错误返回1。
+ * 返回值：正确返回0,否则连接错误返回-1，参数错误返回1，文件打开错误返回2。
  */
 int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,char * PASV_ip,int PASV_port)
 {
@@ -515,14 +557,37 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 		param = ch;
 		ch = strtok(NULL,"/");
 	}
-	fp = fopen(param, "wb");	
+	fp = fopen(param, "wb");
+	if (!fp)
+	{
+		printf("Open file error!\n");
+		return 2;
+	}	
 	filefd = fileno(fp);
-		
+	
 	if (send(sockfd, buffer, (int)strlen(buffer), 0) < 0 )
 	{
 		printf("Error send(): %s(%d)\n", strerror(errno), errno);
 		close(sockfd);
+		fclose(fp);
 		return -1;
+	}
+	
+	//判断是否处于连接状态
+	if(!is_PORT && !is_PASV)
+	{
+		int len = 0;
+		if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
+		{
+			printf("Error recv(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			return -1;
+		}
+		
+		buffer[len]='\0';			
+		printf(">>>> %s", buffer);
+		fclose(fp);
+		return 1;
 	}
 
 	//是PORT连接接收数据
@@ -600,10 +665,10 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 						prompt[0] = buffer;
 						for(int i=0;;i++)
 						{
-							prompt[i] = strtok_r(prompt[i], "\n\r", &prompt[i+1]);
+							prompt[i] = strtok_r(prompt[i], "\r\n", &prompt[i+1]);
 							if(!prompt[i])
 								break;
-							printf(">>>> %s\n\r", prompt[i]);
+							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
 							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
@@ -683,7 +748,7 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 		}    	
     
 	}
-	else if(is_PASV)
+	else
 	{
 	
 		struct sockaddr_in addr;	
@@ -756,10 +821,10 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 						prompt[0] = buffer;
 						for(int i=0;;i++)
 						{
-							prompt[i] = strtok_r(prompt[i], "\n\r", &prompt[i+1]);
+							prompt[i] = strtok_r(prompt[i], "\r\n", &prompt[i+1]);
 							if(!prompt[i])
 								break;
-							printf(">>>> %s\n\r", prompt[i]);
+							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
 							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
@@ -816,21 +881,6 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 		}    	
     		
 	}
-	else
-	{
-		int len = 0;
-		if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
-		{
-			printf("Error recv(): %s(%d)\n", strerror(errno), errno);
-			close(sockfd);
-			return -1;
-		}
-		
-		buffer[len]='\0';			
-		printf(">>>> %s", buffer);
-		fclose(fp);
-		return 1;
-	}
 	
 	return 0;
 }
@@ -846,7 +896,7 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
  * -is_PASV：是否为PASV连接形式
  * -PASV_ip：PASV连接的地址
  * -PASV_port：PASV连接的端口
- * 返回值：正确返回0,否则连接错误返回-1，参数错误返回1。
+ * 返回值：正确返回0,否则连接错误返回-1，参数错误返回1，文件打开错误返回2。
  */
 int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,char * PASV_ip,int PASV_port)
 {
@@ -870,15 +920,32 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 	if (!fp)
 	{
 		printf("Open file error!\n");
-		return 1;
+		return 2;
 	}			
 	filefd = fileno(fp);
-		
+	
 	if (send(sockfd, buffer, (int)strlen(buffer), 0) < 0 )
 	{
 		printf("Error send(): %s(%d)\n", strerror(errno), errno);
 		close(sockfd);
 		return -1;
+	}
+	
+	//判断是否处于连接状态
+	if(!is_PORT && !is_PASV)
+	{
+		int len = 0;
+		if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
+		{
+			printf("Error recv(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			fclose(fp);
+			return -1;
+		}
+		
+		buffer[len]='\0';			
+		printf(">>>> %s", buffer);
+		return 1;
 	}
 
 	//是PORT连接传输数据
@@ -913,7 +980,7 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 				maxfd=listenfd>sockfd?listenfd+1:sockfd+1; 
 				maxfd=maxfd>(filefd+1)?maxfd:(filefd+1);
 			}
-			if(client_data_connect && server_data_connect)
+			if(client_data_connect && server_data_connect && datafd>0)
 			{
 				FD_SET(datafd,&wfds); 
 				//描述符最大值加1 
@@ -956,10 +1023,10 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 						prompt[0] = buffer;
 						for(int i=0;;i++)
 						{
-							prompt[i] = strtok_r(prompt[i], "\n\r", &prompt[i+1]);
+							prompt[i] = strtok_r(prompt[i], "\r\n", &prompt[i+1]);
 							if(!prompt[i])
 								break;
-							printf(">>>> %s\n\r", prompt[i]);
+							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
 							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
@@ -1003,7 +1070,8 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 					
 						
 					//如果接口可写且文件可读
-					if(server_data_connect && client_data_connect && FD_ISSET(datafd, &wfds) && FD_ISSET(filefd, &rfds))
+					if(server_data_connect && client_data_connect && datafd > 0 &&
+						FD_ISSET(datafd, &wfds) && FD_ISSET(filefd, &rfds))
 					{
 
 						//读文件内容
@@ -1024,23 +1092,29 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 							return 1;
 						}
 						
+						//若读入大小为0
+						if(!data_size)
+						{
+							close(datafd);
+							datafd=-1;
+						}
+						
 					}
-	   	  				
-	   				
+	   	  				  				
 					break;
 					
     			}
     			
-    			if(send_end && !data_size)
-				{
-					close(datafd);
-					fclose(fp);
+    			if(send_end)
+    			{
+    				fclose(fp);
 					return 0;
 				}
+			
 		}    	
     
 	}
-	else if(is_PASV)
+	else
 	{
 	
 		struct sockaddr_in addr;	
@@ -1077,8 +1151,9 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
    			FD_ZERO(&wfds);
    			//添加描述符 
 			FD_SET(filefd,&rfds); 
-			FD_SET(sockfd,&rfds); 
-			FD_SET(datafd,&wfds); 
+			FD_SET(sockfd,&rfds);
+			if(datafd > 0) 
+				FD_SET(datafd,&wfds); 
 			//描述符最大值加1 
 			maxfd=datafd>filefd?datafd+1:filefd+1; 
 			maxfd=maxfd>(sockfd+1)?maxfd:(sockfd+1);
@@ -1102,7 +1177,8 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
 						{
 							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
-							close(datafd);
+							if(datafd>0)
+								close(datafd);
 							close(sockfd);
 							fclose(fp);
 							return -1;
@@ -1113,15 +1189,16 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 						prompt[0] = buffer;
 						for(int i=0;;i++)
 						{
-							prompt[i] = strtok_r(prompt[i], "\n\r", &prompt[i+1]);
+							prompt[i] = strtok_r(prompt[i], "\r\n", &prompt[i+1]);
 							if(!prompt[i])
 								break;
-							printf(">>>> %s\n\r", prompt[i]);
+							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
 							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
 							{
-								close(datafd);
+								if(datafd>0)
+									close(datafd);
 								fclose(fp);
 								return 1;
 							}
@@ -1135,7 +1212,7 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
     				}
     				
 					//如果接口可写且文件可读
-					if(FD_ISSET(datafd, &wfds) && FD_ISSET(filefd, &rfds))
+					if(datafd > 0 && FD_ISSET(datafd, &wfds) && FD_ISSET(filefd, &rfds))
 					{
 
 						//读文件内容
@@ -1156,36 +1233,29 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 							return 1;
 						}
 						
+						//若读入大小为0
+						if(!data_size)
+						{
+							close(datafd);
+							datafd=-1;
+						}
+						
 					}
 	   				
 					break;
 					
     			}
     			
-    			if(send_end && !data_size)
-				{
-					close(datafd);
-					fclose(fp);
+    			if(send_end)
+    			{
+    				fclose(fp);
 					return 0;
 				}
+				
 		}    	
     		
 	}
-	else
-	{
-		int len = 0;
-		if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
-		{
-			printf("Error recv(): %s(%d)\n", strerror(errno), errno);
-			close(sockfd);
-			return -1;
-		}
-		
-		buffer[len]='\0';			
-		printf(">>>> %s", buffer);
-		fclose(fp);
-		return 1;
-	}
+
 	
 	return 0;
 }
