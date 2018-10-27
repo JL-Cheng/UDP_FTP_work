@@ -18,7 +18,6 @@ int create_socket(int port)
 	//创建套接字
 	if((sockfd = socket(AF_INET,SOCK_STREAM,0))<0)
 	{
-		printf("Error socket(): %s(%d)\n", strerror(errno), errno);
 		return -1;
 	}
 	
@@ -32,7 +31,6 @@ int create_socket(int port)
 	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(int)) < 0) 
 	{
 		close(sockfd);
-		printf("Error setsockopt(): %s(%d)\n", strerror(errno), errno);
 		return -1; 
 	}
 	
@@ -40,14 +38,12 @@ int create_socket(int port)
 	if(bind(sockfd,(struct sockaddr *) &addr,sizeof(addr)) < 0)
 	{
 		close(sockfd);
-		printf("Error bind(): %s(%d)\n", strerror(errno), errno);
 		return -1;
 	}
 	
 	//开始监听socket
 	if (listen(sockfd, 10) < 0) 
 	{
-		printf("Error listen(): %s(%d)\n", strerror(errno), errno);
 		return -1;
 	}
 	
@@ -69,7 +65,6 @@ int accept_socket(int listenfd)
 	
 	if (sockfd < 0)
 	{
-		printf("Error accept(): %s(%d)\n", strerror(errno), errno);
 		return -1; 
 	}
 	return sockfd;	
@@ -100,7 +95,6 @@ int receive_cmd(int sockfd,char * cmd,char *param)
 	num_bytes = recv(sockfd, buffer, MAX_SIZE, 0);
 	if (num_bytes < 0)
 	{
-		printf("Error recv(): %s(%d)\n", strerror(errno), errno);
 		return -1;
 	}
 	strtok(buffer,"\r\n");
@@ -120,7 +114,6 @@ int receive_cmd(int sockfd,char * cmd,char *param)
 	}
 	if(!cmd_valid)
 	{
-		printf("Invalid command!\n");
 		send_data(sockfd,prompt1,strlen(prompt1));
 		return -1;
 		
@@ -132,7 +125,6 @@ int receive_cmd(int sockfd,char * cmd,char *param)
 		param_t[strlen(param_t)-1]='\0';
 	if(param_t && (strlen(param_t) >= MAX_SIZE))
 	{
-		printf("Syntax error in parameters!\n");
 		send_data(sockfd,prompt2,strlen(prompt2));
 		return -1;
 	}
@@ -158,7 +150,6 @@ int send_data(int sockfd,char *buf,int bufsize)
 	num_bytes = send(sockfd, buf, bufsize, 0);
 	if (num_bytes < 0)
 	{
-		printf("Error send(): %s(%d)\n", strerror(errno), errno);
 		return -1;
 	}
 
@@ -183,7 +174,6 @@ int get_ip_port(char *param,char *ip,int *port)
 	ch = strtok(param, ",");
 	if(!ch || strlen(ch)>3)
 	{
-		printf("Wrong port param.\n");
 		return -1;
 	}
 	else
@@ -192,7 +182,6 @@ int get_ip_port(char *param,char *ip,int *port)
 		{
 			if(ch[i]<'0' || ch[i]>'9')
 			{
-				printf("Wrong port param.\n");
 				return -1;	
 			}
 		}
@@ -204,7 +193,6 @@ int get_ip_port(char *param,char *ip,int *port)
 		ch = strtok(NULL, ",");
 		if(!ch || strlen(ch)>3)
 		{
-			printf("Wrong port param.\n");
 			return -1;
 		}
 		else
@@ -213,7 +201,6 @@ int get_ip_port(char *param,char *ip,int *port)
 			{
 				if(ch[i]<'0' || ch[i]>'9')
 				{
-					printf("Wrong port param.\n");
 					return -1;	
 				}
 			}
@@ -227,7 +214,6 @@ int get_ip_port(char *param,char *ip,int *port)
 		ch = strtok(NULL, ",");
 		if(!ch)
 		{
-			printf("Wrong port param.\n");
 			return -1;
 		}
 		else
@@ -236,7 +222,6 @@ int get_ip_port(char *param,char *ip,int *port)
 			{
 				if(ch[i]<'0' || ch[i]>'9')
 				{
-					printf("Wrong port param.\n");
 					return -1;	
 				}
 			}
@@ -246,7 +231,6 @@ int get_ip_port(char *param,char *ip,int *port)
 	
 	if(*port < 20000 || *port > 65535)
 	{
-		printf("Port should range from 20000 to 65535.\n");
 		return -1;
 	}	
 	
@@ -284,7 +268,6 @@ int server_work(int argc,char **argv)
 		}
 		else
 		{
-			printf("usage: ./server -port [number] -root [string]\n");
 			exit(0);
 		}
 	}
@@ -292,7 +275,6 @@ int server_work(int argc,char **argv)
 	// 创建监听套接字 
 	if ((listenfd = create_socket(PORT)) < 0 )
 	{
-		printf("Error create socket!");
 		exit(1);
 	}
 	
@@ -301,13 +283,12 @@ int server_work(int argc,char **argv)
 	{
 		if((controlfd = accept_socket(listenfd))<0)
 		{
-			printf("Something wrong!");
 			break;
 		}
 		
 		if((pid=fork())<0)
 		{
-			printf("Fail to create subprocess!");
+			continue;
 		}
 		
 		else if (!pid)
@@ -351,15 +332,12 @@ void server_process(int controlfd)
 	char prompt4[] = "221 Goodbye.\r\n";
 
 	//首先返回成功连接信号
-	printf("success_connect\n");
 	send_data(controlfd,prompt1,strlen(prompt1));
 	
 	//进行用户登录验证
-	printf("user_login\n");
 	server_login(controlfd);
 	
 	//开启循环监听用户消息
-	printf("start_work\n");
 	while(1)
 	{
 		if(receive_cmd(controlfd,cmd,param))
@@ -409,10 +387,7 @@ void server_process(int controlfd)
 		//若是RETR指令
 		else if(!(strcmp(cmd,"RETR")))
 		{
-			if(server_retr(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd))
-			{
-				printf("Send file wrong.\n");
-			}
+			server_retr(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd);
 			if(is_PORT)
 			{
 				is_PORT=0;
@@ -429,10 +404,7 @@ void server_process(int controlfd)
 		//若是STOR指令
 		else if(!(strcmp(cmd,"STOR")))
 		{
-			if(server_stor(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd))
-			{
-				printf("write file wrong.\n");
-			}
+			server_stor(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd);
 			if(is_PORT)
 			{
 				is_PORT=0;
@@ -449,10 +421,7 @@ void server_process(int controlfd)
 		//若是LIST指令
 		else if(!(strcmp(cmd,"LIST")))
 		{
-			if(server_list(controlfd,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd))
-			{
-				printf("Send list wrong.\n");
-			}
+			server_list(controlfd,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd);
 			if(is_PORT)
 			{
 				is_PORT=0;
@@ -608,7 +577,6 @@ int server_rnfr(int controlfd,char *param,char *filename)
 	else if(filename[strlen(filename)-1]=='/' && param[0]=='/')
 		filename[strlen(filename)-1]='\0';
 	strcat(filename,param);		
-	printf("filename:%s\n",filename);    
 	 
 	stat(filename, &buf); 
 	if(S_IFREG & buf.st_mode)//是文件
@@ -652,7 +620,6 @@ void server_rnto(int controlfd,char *param,char *filename,int is_RNFR)
 	else if(new_filename[strlen(new_filename)-1]=='/' && param[0]=='/')
 		new_filename[strlen(new_filename)-1]='\0';
 	strcat(new_filename,param);		
-	printf("new_filename:%s\n",new_filename);
 	
 	if(!(rename(filename,new_filename)))
 	{
@@ -712,7 +679,6 @@ void server_mkd(int controlfd,char *param)
 	else if(directory[strlen(directory)-1]=='/' && param[0]=='/')
 		directory[strlen(directory)-1]='\0';
 	strcat(directory,param);		
-	printf("directory:%s\n",directory);
 	  
 	len=strlen(directory);
 	for(int i=1; i<len; i++ )
@@ -736,13 +702,11 @@ void server_mkd(int controlfd,char *param)
 	stat(directory, &buf ); 
 	if(S_IFDIR & buf.st_mode)//是目录
 	{ 
-		printf("folder\n"); 
 		sprintf(prompt1,"257 %s Created.\r\n",directory);
 		send_data(controlfd,prompt1,strlen(prompt1));
 	}
 	else if(S_IFREG & buf.st_mode)//是文件
 	{ 
-		printf("file\n"); 
 		send_data(controlfd,prompt2,strlen(prompt2));
 	} 
      
@@ -771,7 +735,6 @@ void server_rmd(int controlfd,char *param)
 	else if(directory[strlen(directory)-1]=='/' && param[0]=='/')
 		directory[strlen(directory)-1]='\0';
 	strcat(directory,param);		
-	printf("directory:%s\n",directory);
 	  
 	if(!rmdir(directory))
 	{
@@ -804,7 +767,6 @@ void server_cwd(int controlfd,char *param)
 	if(param[0]!='/')
 		directory[0]='/';
 	strcat(directory,param);		
-	printf("directory:%s\n",directory);
 	  
 	if(access(directory,0)==0)
 	{
@@ -861,7 +823,6 @@ int server_port(int controlfd,char *param,char *ip,int *port)
 	}
 	
 	send_data(controlfd,prompt2,strlen(prompt2));
-	printf("PORT:\nip:%s\nport:%d\n",ip,*port);
 	return 0;
 	
 }
@@ -885,12 +846,10 @@ int server_pasv(int controlfd)
 	srand((unsigned)time(NULL));
 	port = 	rand() % 45535 + 20000;
 	
-	printf("PASV:\nport:%d\n",port);
 	//开始监听
 	int listenfd = create_socket(port);	
 	if(listenfd<0)
 	{
-		printf("Create listenfd error.\n");
 		send_data(controlfd,prompt2,strlen(prompt2));
 		return -1;
 	}
@@ -899,8 +858,6 @@ int server_pasv(int controlfd)
 	socklen_t len = sizeof addr;
 	getsockname(controlfd, (struct sockaddr*)&addr, &len); // 获得服务器ip
 	inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
-	
-	printf("ip:%s\n",ip);
 		
 	strcat(prompt1,"(");
 	ch = strtok(ip, ".");
@@ -972,7 +929,6 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	else if(filename[strlen(filename)-1]=='/' && param[0]=='/')
 		filename[strlen(filename)-1]='\0';
 	strcat(filename,param);		
-	printf("filename:%s\n",filename);						
 	fp = fopen(filename, "rb"); 
 	if (!fp)
 	{
@@ -989,7 +945,6 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		//创建数据套接字
 		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		{
-			printf("Error socket(): %s(%d)\n", strerror(errno), errno);
 			send_data(controlfd,prompt2,strlen(prompt2));
 			fclose(fp);
 			return -1;
@@ -1004,7 +959,6 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-			printf("Error connect(): %s(%d)\n", strerror(errno), errno);
 			send_data(controlfd,prompt2,strlen(prompt2));
 			close(datafd);
 			fclose(fp);
@@ -1020,7 +974,6 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		struct timeval accept_timeout = {6,0};  
 		if (setsockopt(PASV_listenfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&accept_timeout, sizeof(struct timeval)) < 0)  
 		{  
-			printf("Error setsockopt(): %s(%d)\n", strerror(errno), errno);
 			send_data(controlfd,prompt2,strlen(prompt2));
 			close(PASV_listenfd);
 			fclose(fp);
@@ -1029,7 +982,6 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		datafd = accept_socket(PASV_listenfd);
 		if(datafd<0)
 		{
-			printf("Create datafd error.\n");
 			send_data(controlfd,prompt2,strlen(prompt2));
 			close(PASV_listenfd);
 			fclose(fp);
@@ -1068,7 +1020,6 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 				{
 					//读文件内容
 					num_read = fread(data, 1, MAX_SIZE, fp);
-					printf("num_read:%d\n",num_read);
 					if (num_read < 0) 
 					{
 						send_data(controlfd,prompt5,strlen(prompt5));
@@ -1151,7 +1102,6 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	if(filename[strlen(filename)-1]!='/')
 		strcat(filename,"/");
 	strcat(filename,param);		
-	printf("filename:%s\n",filename);						
 	fp = fopen(filename, "wb"); 
 	if (!fp)
 	{
@@ -1168,7 +1118,6 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		//创建数据套接字
 		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		{
-			printf("Error socket(): %s(%d)\n", strerror(errno), errno);
 			send_data(controlfd,prompt2,strlen(prompt2));
 			fclose(fp);
 			return -1;
@@ -1183,7 +1132,6 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-	       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
 	       		send_data(controlfd,prompt2,strlen(prompt2));
 	       		close(datafd);
 	       		fclose(fp);
@@ -1199,7 +1147,6 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		struct timeval accept_timeout = {6,0};  
 		if (setsockopt(PASV_listenfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&accept_timeout, sizeof(struct timeval)) < 0)  
 		{  
-			printf("Error setsockopt(): %s(%d)\n", strerror(errno), errno);
 			send_data(controlfd,prompt2,strlen(prompt2));
 			close(PASV_listenfd);
 			fclose(fp);
@@ -1208,7 +1155,6 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		datafd = accept_socket(PASV_listenfd);
 		if(datafd<0)
 		{
-			printf("Create datafd error.\n");
 			send_data(controlfd,prompt2,strlen(prompt2));
 			close(PASV_listenfd);
 			fclose(fp);
@@ -1247,7 +1193,6 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 				{
 					//读套接字传来的内容
 					num_read = recv(datafd, data, MAX_SIZE, 0);
-					printf("num_read:%d\n",num_read);
 					if (num_read < 0) 
 					{
 						send_data(controlfd,prompt6,strlen(prompt6));
@@ -1330,7 +1275,6 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 	if(filename[strlen(filename)-1]!='/')
 		strcat(filename,"/");
 	strcat(filename,"tmp.txt");		
-	printf("filename:%s\n",filename);						
 	fp = fopen(filename, "rb"); 
 	if (!fp)
 	{
@@ -1347,7 +1291,6 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 		//创建数据套接字
 		if ((datafd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		{
-			printf("Error socket(): %s(%d)\n", strerror(errno), errno);
 			send_data(controlfd,prompt2,strlen(prompt2));
 			fclose(fp);
 			return -1;
@@ -1362,7 +1305,6 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-			printf("Error connect(): %s(%d)\n", strerror(errno), errno);
 			send_data(controlfd,prompt2,strlen(prompt2));
 			close(datafd);
 			fclose(fp);
@@ -1378,7 +1320,6 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 		struct timeval accept_timeout = {6,0};  
 		if (setsockopt(PASV_listenfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&accept_timeout, sizeof(struct timeval)) < 0)  
 		{  
-			printf("Error setsockopt(): %s(%d)\n", strerror(errno), errno);
 			send_data(controlfd,prompt2,strlen(prompt2));
 			close(PASV_listenfd);
 			fclose(fp);
@@ -1387,7 +1328,6 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 		datafd = accept_socket(PASV_listenfd);
 		if(datafd<0)
 		{
-			printf("Create datafd error.\n");
 			send_data(controlfd,prompt2,strlen(prompt2));
 			close(PASV_listenfd);
 			fclose(fp);
@@ -1426,7 +1366,6 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 				{
 					//读文件内容
 					num_read = fread(data, 1, MAX_SIZE, fp);
-					printf("num_read:%d\n",num_read);
 					if (num_read < 0) 
 					{
 						send_data(controlfd,prompt5,strlen(prompt5));
