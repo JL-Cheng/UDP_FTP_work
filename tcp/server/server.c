@@ -45,7 +45,8 @@ int create_socket(int port)
 	}
 	
 	//开始监听socket
-	if (listen(sockfd, 10) < 0) {
+	if (listen(sockfd, 10) < 0) 
+	{
 		printf("Error listen(): %s(%d)\n", strerror(errno), errno);
 		return -1;
 	}
@@ -613,12 +614,12 @@ int server_rnfr(int controlfd,char *param,char *filename)
 	if(S_IFREG & buf.st_mode)//是文件
 	{ 
 		sprintf(prompt1,"350 %s can be renamed.\r\n",filename);
-    	send_data(controlfd,prompt1,strlen(prompt1));
-    	return 0;
+		send_data(controlfd,prompt1,strlen(prompt1));
+		return 0;
 	}
 
-    send_data(controlfd,prompt2,strlen(prompt2));
-    return -1;
+	send_data(controlfd,prompt2,strlen(prompt2));
+	return -1;
 }
 
 /* 函数功能：服务器RNTO命令的控制函数
@@ -640,7 +641,7 @@ void server_rnto(int controlfd,char *param,char *filename,int is_RNFR)
 	if(!is_RNFR)
 	{
 		send_data(controlfd,prompt2,strlen(prompt2));
-    	return;
+ 		return;
 	}
 	
 	//新文件路径
@@ -656,14 +657,14 @@ void server_rnto(int controlfd,char *param,char *filename,int is_RNFR)
 	if(!(rename(filename,new_filename)))
 	{
 		sprintf(prompt1,"250 %s is successfully renamed to %s.\r\n",filename,new_filename);
-    	send_data(controlfd,prompt1,strlen(prompt1));
-    	return;
+		send_data(controlfd,prompt1,strlen(prompt1));
+		return;
 	}
 	else
 	{
 		sprintf(prompt1,"550 Renaming %s failed.\r\n",filename);
-    	send_data(controlfd,prompt1,strlen(prompt1));
-    	return;
+		send_data(controlfd,prompt1,strlen(prompt1));
+		return;
 	}
 	
 }
@@ -713,23 +714,23 @@ void server_mkd(int controlfd,char *param)
 	strcat(directory,param);		
 	printf("directory:%s\n",directory);
 	  
-    len=strlen(directory);
-    for(int i=1; i<len; i++ )
-    {
-        if( directory[i]=='/' )
-        {
-            directory[i] = '\0';
-            if(access(directory,0)!=0)
-            {
-                mkdir(directory, 0777);
-            }
-            directory[i]='/';
-        }
-    }
-    if(len>0 && access(directory,0)!=0 )
-    {
-        mkdir(directory, 0777 );
-    }
+	len=strlen(directory);
+	for(int i=1; i<len; i++ )
+	{
+		if( directory[i]=='/' )
+		{
+			directory[i] = '\0';
+			if(access(directory,0)!=0)
+			{
+				mkdir(directory, 0777);
+			}
+			directory[i]='/';
+		}
+	}
+	if(len>0 && access(directory,0)!=0 )
+	{
+		mkdir(directory, 0777 );
+	}
     
 	 
 	stat(directory, &buf ); 
@@ -737,7 +738,7 @@ void server_mkd(int controlfd,char *param)
 	{ 
 		printf("folder\n"); 
 		sprintf(prompt1,"257 %s Created.\r\n",directory);
-    	send_data(controlfd,prompt1,strlen(prompt1));
+		send_data(controlfd,prompt1,strlen(prompt1));
 	}
 	else if(S_IFREG & buf.st_mode)//是文件
 	{ 
@@ -745,7 +746,7 @@ void server_mkd(int controlfd,char *param)
 		send_data(controlfd,prompt2,strlen(prompt2));
 	} 
      
-    return;
+	return;
 
 }
 
@@ -772,15 +773,15 @@ void server_rmd(int controlfd,char *param)
 	strcat(directory,param);		
 	printf("directory:%s\n",directory);
 	  
-    if(!rmdir(directory))
-    {
-    	sprintf(prompt1,"250 %s Removed.\r\n",directory);
-    	send_data(controlfd,prompt1,strlen(prompt1));
-    }
-    else
-    	send_data(controlfd,prompt2,strlen(prompt2));
+	if(!rmdir(directory))
+	{
+		sprintf(prompt1,"250 %s Removed.\r\n",directory);
+		send_data(controlfd,prompt1,strlen(prompt1));
+	}
+	else
+		send_data(controlfd,prompt2,strlen(prompt2));
      
-    return;
+	return;
 
 }
 
@@ -820,7 +821,7 @@ void server_cwd(int controlfd,char *param)
 	sprintf(prompt2,"550 %s: No such file or directory.\r\n",directory);
 	send_data(controlfd,prompt2,strlen(prompt2));  
 	   
-    return;
+	return;
 }
 
 /* 函数功能：服务器PWD命令的控制函数
@@ -836,7 +837,7 @@ void server_pwd(int controlfd,char *param)
 	sprintf(prompt1,"257 Current working directory:%s.\r\n",FILE_ROOT);
 	send_data(controlfd,prompt1,strlen(prompt1));  
 	   
-    return;
+	return;
 }
 
 /* 函数功能：服务器PORT命令的控制函数
@@ -992,7 +993,7 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			send_data(controlfd,prompt2,strlen(prompt2));
 			fclose(fp);
 			return -1;
-    	}
+		}
 
 		//设置协议地址
 		memset(&addr, 0, sizeof(addr));
@@ -1003,12 +1004,12 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
-       		send_data(controlfd,prompt2,strlen(prompt2));
-       		close(datafd);
-       		fclose(fp);
+			printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+			send_data(controlfd,prompt2,strlen(prompt2));
+			close(datafd);
+			fclose(fp);
 			return -1;
-    	}
+		}
     	
  		send_data(controlfd,prompt4,strlen(prompt4));
     	
@@ -1064,8 +1065,8 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			default:
 				//如果文件可读
 				if(FD_ISSET(filefd, &rfds))
-    			{
-    				//读文件内容
+				{
+					//读文件内容
 					num_read = fread(data, 1, MAX_SIZE, fp);
 					printf("num_read:%d\n",num_read);
 					if (num_read < 0) 
@@ -1171,7 +1172,7 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			send_data(controlfd,prompt2,strlen(prompt2));
 			fclose(fp);
 			return -1;
-    	}
+		}
 
 		//设置协议地址
 		memset(&addr, 0, sizeof(addr));
@@ -1182,14 +1183,14 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
-       		send_data(controlfd,prompt2,strlen(prompt2));
-       		close(datafd);
-       		fclose(fp);
+	       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+	       		send_data(controlfd,prompt2,strlen(prompt2));
+	       		close(datafd);
+	       		fclose(fp);
 			return -1;
-    	}
+		}
     	
-    	send_data(controlfd,prompt4,strlen(prompt4));
+		send_data(controlfd,prompt4,strlen(prompt4));
     	
 	}
 	else
@@ -1243,8 +1244,8 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			default:
 				//如果数据套接字可读
 				if(FD_ISSET(datafd, &rfds))
-    			{
-    				//读套接字传来的内容
+				{
+					//读套接字传来的内容
 					num_read = recv(datafd, data, MAX_SIZE, 0);
 					printf("num_read:%d\n",num_read);
 					if (num_read < 0) 
@@ -1350,7 +1351,7 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 			send_data(controlfd,prompt2,strlen(prompt2));
 			fclose(fp);
 			return -1;
-    	}
+ 		}
 
 		//设置协议地址
 		memset(&addr, 0, sizeof(addr));
@@ -1361,12 +1362,12 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
-       		send_data(controlfd,prompt2,strlen(prompt2));
-       		close(datafd);
-       		fclose(fp);
+			printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+			send_data(controlfd,prompt2,strlen(prompt2));
+			close(datafd);
+			fclose(fp);
 			return -1;
-    	}
+		}
     	
  		send_data(controlfd,prompt4,strlen(prompt4));
     	
@@ -1422,8 +1423,8 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 			default:
 				//如果文件可读
 				if(FD_ISSET(filefd, &rfds))
-    			{
-    				//读文件内容
+				{
+					//读文件内容
 					num_read = fread(data, 1, MAX_SIZE, fp);
 					printf("num_read:%d\n",num_read);
 					if (num_read < 0) 

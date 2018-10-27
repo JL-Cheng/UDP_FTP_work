@@ -45,7 +45,8 @@ int create_socket(int port)
 	}
 	
 	//开始监听socket
-	if (listen(sockfd, 10) < 0) {
+	if (listen(sockfd, 10) < 0) 
+	{
 		printf("Error listen(): %s(%d)\n", strerror(errno), errno);
 		return -1;
 	}
@@ -270,7 +271,7 @@ int client_work(int argc,char **argv)
 	char cmd[5];
 	char param[MAX_SIZE];
 	char *ch;
-    int sockfd = -1;
+	int sockfd = -1;
 	int len=0;
 	
 	char PORT_ip[20];//PORT指令数据传输ip地址
@@ -478,7 +479,7 @@ int client_work(int argc,char **argv)
 			break;
 	} // 循环得到更多的用户输入
  
-    close(sockfd);
+	close(sockfd);
 
 	return 0;
 
@@ -540,7 +541,7 @@ int client_pasv(int sockfd,char *buffer,char *ip,int *port)
 		ch = strtok(NULL, "(");
 		ch = strtok(NULL,")");
 		if(get_ip_port(ch,ip,port)<0)
-			return -1;
+		return -1;
 	}
 	
 	return 0;
@@ -673,8 +674,8 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 				default:
 					//如果控制套接字可读
 					if(FD_ISSET(sockfd, &rfds))
-    				{
-    					//读套接字传来的内容
+					{
+						//读套接字传来的内容
 						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
 						{
 							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
@@ -718,9 +719,9 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 
 						}
 						
-    				}
+					}
     				
-    				//如果监听套接字可读
+					//如果监听套接字可读
 					if(!client_data_connect && FD_ISSET(listenfd, &rfds))
 					{
 						datafd = accept_socket(listenfd);
@@ -787,7 +788,7 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 			close(sockfd);
 			fclose(fp);
 			return -1;
-    	}
+		}
 
 		//设置协议地址
 		memset(&addr, 0, sizeof(addr));
@@ -798,17 +799,17 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
-       		close(sockfd);
-       		close(datafd);
-       		fclose(fp);
+			printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			close(datafd);
+			fclose(fp);
 			return -1;
-    	}
+		}
     	
 		//select进行接口判断
 		while(1)
 		{
-    		//清空集合
+			//清空集合
    			FD_ZERO(&rfds);
    			FD_ZERO(&wfds);
    			//添加描述符 
@@ -833,8 +834,8 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 				default:
 					//如果控制套接字可读
 					if(FD_ISSET(sockfd, &rfds))
-    				{
-    					//读套接字传来的内容
+					{
+						//读套接字传来的内容
 						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
 						{
 							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
@@ -868,7 +869,7 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 
 						}
 						
-    				}
+					}
 
 					//如果数据套接字可读
 					if(FD_ISSET(datafd, &rfds))
@@ -995,7 +996,7 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 		while(1)
 		{
 
-    		//清空集合
+			//清空集合
    			FD_ZERO(&rfds);
    			FD_ZERO(&wfds);
    			//添加描述符 
@@ -1032,8 +1033,8 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 				default:
 					//如果控制套接字可读
 					if(FD_ISSET(sockfd, &rfds))
-    				{
-    					//读套接字传来的内容
+					{
+						//读套接字传来的内容
 						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
 						{
 							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
@@ -1077,9 +1078,9 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 
 						}
 						
-    				}
+					}
     				
-    				//如果监听套接字可读
+					//如果监听套接字可读
 					if(!client_data_connect && FD_ISSET(listenfd, &rfds))
 					{
 						datafd = accept_socket(listenfd);
@@ -1153,7 +1154,7 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 			close(sockfd);
 			fclose(fp);
 			return -1;
-    	}
+		}
 
 		//设置协议地址
 		memset(&addr, 0, sizeof(addr));
@@ -1164,17 +1165,17 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
-       		close(sockfd);
-       		close(datafd);
-       		fclose(fp);
+			printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			close(datafd);
+			fclose(fp);
 			return -1;
-    	}
+		}
     	
 		//select进行接口判断
 		while(1)
 		{
-    		//清空集合
+			//清空集合
    			FD_ZERO(&rfds);
    			FD_ZERO(&wfds);
    			//添加描述符 
@@ -1200,8 +1201,8 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 				default:
 					//如果控制套接字可读
 					if(FD_ISSET(sockfd, &rfds))
-    				{
-    					//读套接字传来的内容
+					{
+						//读套接字传来的内容
 						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
 						{
 							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
@@ -1237,8 +1238,8 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 
 						}
 						
-    				}
-    				
+					}
+    					
 					//如果接口可写且文件可读
 					if(datafd > 0 && FD_ISSET(datafd, &wfds) && FD_ISSET(filefd, &rfds))
 					{
@@ -1276,7 +1277,7 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
     			
     			if(send_end)
     			{
-    				fclose(fp);
+					fclose(fp);
 					return 0;
 				}
 				
@@ -1358,7 +1359,7 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 		while(1)
 		{
 
-    		//清空集合
+			//清空集合
    			FD_ZERO(&rfds);
    			//添加描述符 
 			FD_SET(sockfd,&rfds); 
@@ -1390,8 +1391,8 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 				default:
 					//如果控制套接字可读
 					if(FD_ISSET(sockfd, &rfds))
-    				{
-    					//读套接字传来的内容
+					{
+						//读套接字传来的内容
 						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
 						{
 							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
@@ -1433,9 +1434,9 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 
 						}
 						
-    				}
+					}
     				
-    				//如果监听套接字可读
+					//如果监听套接字可读
 					if(!client_data_connect && FD_ISSET(listenfd, &rfds))
 					{
 						datafd = accept_socket(listenfd);
@@ -1487,7 +1488,7 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 			printf("Error socket(): %s(%d)\n", strerror(errno), errno);
 			close(sockfd);
 			return -1;
-    	}
+		}
 
 		//设置协议地址
 		memset(&addr, 0, sizeof(addr));
@@ -1498,16 +1499,16 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 		// 在套接字上创建连接
 		if(connect(datafd, (struct sockaddr *)&addr, sizeof(addr)) < 0 )
 		{
-       		printf("Error connect(): %s(%d)\n", strerror(errno), errno);
-       		close(sockfd);
-       		close(datafd);
+			printf("Error connect(): %s(%d)\n", strerror(errno), errno);
+			close(sockfd);
+			close(datafd);
 			return -1;
-    	}
+		}
     	
 		//select进行接口判断
 		while(1)
 		{
-    		//清空集合
+			//清空集合
    			FD_ZERO(&rfds);
    			//添加描述符 
 			FD_SET(sockfd,&rfds); 
@@ -1528,8 +1529,8 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 				default:
 					//如果控制套接字可读
 					if(FD_ISSET(sockfd, &rfds))
-    				{
-    					//读套接字传来的内容
+					{
+						//读套接字传来的内容
 						if ((len=recv(sockfd, buffer, MAX_SIZE, 0)) < 0) 
 						{
 							printf("Error recv(): %s(%d)\n", strerror(errno), errno);
@@ -1561,7 +1562,7 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 
 						}
 						
-    				}
+					}
 
 					//如果数据套接字可读
 					if(FD_ISSET(datafd, &rfds))
