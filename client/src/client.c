@@ -129,6 +129,7 @@ int get_input(char* buffer, int size,char *cmd,char *param)
 		return -1;	
 	
 	strcpy(buffer_t,buffer);
+	strcat(buffer,"\r\n");
 	//判断cmd的合法性
 	cmd_t = strtok(buffer_t, " ");
 	if(cmd_t)
@@ -244,8 +245,7 @@ int get_ip_port(char *param,char *ip,int *port)
 	
 	if(*port < 20000 || *port > 65535)
 	{
-		printf("Port should range from 20000 to 65535.\n");
-		return -1;
+		printf("Port should better range from 20000 to 65535.\n");
 	}	
 	
 	return 0;
@@ -699,7 +699,7 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
-							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550")||!strcmp(ch,"553"))
 							{
 								if(datafd>0)
 									close(datafd);
@@ -856,7 +856,7 @@ int client_retr(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
-							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550")||!strcmp(ch,"553"))
 							{
 								close(datafd);
 								fclose(fp);
@@ -1058,7 +1058,7 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
-							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550")||!strcmp(ch,"553"))
 							{
 								if(datafd>0)
 									close(datafd);
@@ -1224,7 +1224,7 @@ int client_stor(int sockfd,char *buffer,char *param,int is_PORT,char *PORT_ip,in
 							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
-							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550")||!strcmp(ch,"553"))
 							{
 								if(datafd>0)
 									close(datafd);
@@ -1415,7 +1415,7 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
-							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550")||!strcmp(ch,"553"))
 							{
 								if(datafd>0)
 									close(datafd);
@@ -1550,7 +1550,7 @@ int client_list(int sockfd,char *buffer,int is_PORT,char *PORT_ip,int PORT_port,
 							printf(">>>> %s\r\n", prompt[i]);
 							
 							ch = strtok(prompt[i]," ");
-							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550"))
+							if(!strcmp(ch,"451")||!strcmp(ch,"426")||!strcmp(ch,"425")||!strcmp(ch,"550")||!strcmp(ch,"553"))
 							{
 								close(datafd);
 								return 1;
