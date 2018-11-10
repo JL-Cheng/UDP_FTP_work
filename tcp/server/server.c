@@ -943,13 +943,14 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
 	char prompt2[] = "425 Can't open data connection.\r\n";
 	char prompt3[] = "550 Requested file action not taken.\r\n";
-	char prompt4[] = "150 Data connection already open; transfer starting.\r\n";
+	char prompt4[100];
 	char prompt5[] = "451 Requested action aborted: local error in processing.\r\n";
 	char prompt6[] = "426 Connection closed; transfer aborted.\r\n";
 	char prompt7[] = "226 Closing data connection.\r\n";
 	
 	int datafd = -1;
-	int filefd = -1;	
+	int filefd = -1;
+	int start_write = 1;	
 	FILE* fp = NULL;
 	char data[MAX_SIZE];
 	char filename[200];
@@ -973,6 +974,7 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		filename[strlen(filename)-1]='\0';
 	strcat(filename,param);		
 	printf("filename:%s\n",filename);						
+       
 	fp = fopen(filename, "rb"); 
 	if (!fp)
 	{
@@ -980,6 +982,12 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		return -1;
 	}		
 	filefd = fileno(fp);		
+        struct stat statbuf;
+        stat(filename,&statbuf);
+        int size=statbuf.st_size;
+        printf("filesize:%d\n",size);
+        sprintf(prompt4,"150 Data connection already open; transfer starting.The file's size is (%d).\r\n",size);
+
 	
 	//建立数据连接
 	if(is_PORT)
@@ -1047,9 +1055,11 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
    		FD_ZERO(&wfds);
    		//添加描述符 
 		FD_SET(datafd,&wfds); 
+		FD_SET(controlfd,&rfds);
 		FD_SET(filefd,&rfds); 
 		//描述符最大值加1 
 		maxfd=datafd>filefd?datafd+1:filefd+1; 
+		maxfd=maxfd>(controlfd+1)?maxfd:(controlfd+1);
 			
 		//使用select判断状态
 		switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
@@ -1063,8 +1073,21 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			case 0:
 				break;
 			default:
+				if(FD_ISSET(controlfd,&rfds))
+				{
+					memset(data,0,MAX_SIZE);
+					num_read=recv(controlfd,data,MAX_SIZE,0);
+					if(!strcmp(data,"finish"))
+					{
+
+						start_write=1;
+					}
+					printf("back:%s\n",data);
+					memset(data,0,MAX_SIZE);
+					num_read = 0;
+				}
 				//如果文件可读
-				if(FD_ISSET(filefd, &rfds))
+				if(start_write&&FD_ISSET(filefd, &rfds))
 				{
 					//读文件内容
 					num_read = fread(data, 1, MAX_SIZE, fp);
@@ -1088,6 +1111,7 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 							fclose(fp);
 							return -1;
 						}
+						start_write=0;
 					}
    				}
     				
