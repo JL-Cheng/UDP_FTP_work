@@ -192,6 +192,9 @@ void FTP_client_GUI::sendMessage()
 		}
 		if (command == "LIST")
 		{
+			read_size = 0;
+			total_size = 0;
+			files_list_string = "";
 			if (connect_status == "PORT")
 			{
 				if (d_server->isListening())
@@ -263,7 +266,7 @@ void FTP_client_GUI::readMessage()
 			else if (message.split(' ')[0] == "150")
 			{
 				total_size = message.split('(')[1].split(')')[0].toInt();
-				this->addTaskListItem();
+				this->addTasksListItem();
 			}
 		}
 		else if (command_status == "STOR")
@@ -288,7 +291,7 @@ void FTP_client_GUI::readMessage()
 			}
 			else if (message.split(' ')[0] == "150")
 			{
-				this->addTaskListItem();
+				this->addTasksListItem();
 				this->sendData();
 			}
 		}
@@ -303,11 +306,14 @@ void FTP_client_GUI::readMessage()
 					d_socket->close();
 
 				}
+				read_size = 0;
+				total_size = 0;
 				connect_status = "";
 			}
-			/*else if (message.split(' ')[0] == "150")
+			else if (message.split(' ')[0] == "150")
 			{
-			}*/
+				total_size = message.split('(')[1].split(')')[0].toInt();
+			}
 		}
 	}
 }
@@ -332,7 +338,7 @@ void FTP_client_GUI::readData()
 			file->write(in_block);
 			file->flush();
 			read_size += in_block.size();
-			progress_bars[file_row]->setValue(read_size);
+			progress_bars[list_row]->setValue(read_size);
 			QApplication::processEvents();
 
 			m_socket->write(QByteArray(QString("finish\0").toLatin1()));
@@ -361,14 +367,28 @@ void FTP_client_GUI::readData()
 		QByteArray in_block;
 		
 		in_block = d_socket->readAll();
-		text += QString(in_block);
-		ui.message_label->setText(text);
+		files_list_string += QString(in_block);
+		read_size += in_block.size();
 
-		d_socket->flush();
-		d_socket->disconnectFromHost();
-		d_socket->close();
-		connect_status = "";
+		m_socket->write(QByteArray(QString("finish\0").toLatin1()));
+		m_socket->flush();
+		m_socket->waitForBytesWritten(300);
+
+		if (read_size == total_size)
+		{
+			text += files_list_string;
+			ui.message_label->setText(text);
+			this->setFilesList();
+
+			d_socket->flush();
+			d_socket->disconnectFromHost();
+			d_socket->close();
+			read_size = 0;
+			total_size = 0;
+			connect_status = "";
+		}
 		return;
+
 	}
 }
 
@@ -394,7 +414,7 @@ void FTP_client_GUI::sendData()
 			d_socket->waitForBytesWritten(300);
 
 			read_size += out_block.size();
-			progress_bars[file_row]->setValue(read_size);
+			progress_bars[list_row]->setValue(read_size);
 			QApplication::processEvents();
 		}
 
@@ -436,20 +456,41 @@ void FTP_client_GUI::newDataConnect()
 		this, &FTP_client_GUI::displayError);
 }
 
-void FTP_client_GUI::addTaskListItem()
+void FTP_client_GUI::addTasksListItem()
 {
-	file_row = ui.tasks_list->rowCount();
-	ui.tasks_list->setRowCount(file_row + 1);
-	ui.tasks_list->setItem(file_row, 0, new QTableWidgetItem(file->fileName()));
-	ui.tasks_list->setItem(file_row, 1, new QTableWidgetItem(QString::number(total_size)+"byte"));
-	ui.tasks_list->setItem(file_row, 2, new QTableWidgetItem((command_status=="RETR")?"下载":"上传"));
+	list_row = ui.tasks_list->rowCount();
+	ui.tasks_list->setRowCount(list_row + 1);
+	ui.tasks_list->setItem(list_row, 0, new QTableWidgetItem(file->fileName()));
+	ui.tasks_list->setItem(list_row, 1, new QTableWidgetItem(QString::number(total_size)+"byte"));
+	ui.tasks_list->setItem(list_row, 2, new QTableWidgetItem((command_status=="RETR")?"下载":"上传"));
 	QProgressBar *bar = new QProgressBar(ui.tasks_list);
 	bar->setTextVisible(true);
 	bar->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 	bar->setRange(0, total_size);
 	bar->setValue(0);
-	ui.tasks_list->setCellWidget(file_row, 3, bar);
+	ui.tasks_list->setCellWidget(list_row, 3, bar);
 	progress_bars.append(bar);
+	QApplication::processEvents();
+}
+
+void FTP_client_GUI::setFilesList()
+{
+	QStringList files_list = files_list_string.split('\n');
+	int file_row = 0;
+	for (int i = 1; i < files_list.length(); i++)
+	{
+		QStringList file_info_list = files_list[i].split(QRegExp("[\\s]+"));
+		file_row = ui.files_list->rowCount();
+		ui.files_list->setRowCount(file_row + 1);
+		if (file_info_list[0][0] == '-')
+		{
+			ui.files_list->setItem(file_row, 0, new QTableWidgetItem(QIcon(":/icons/file_icon"), file_info_list[8]));
+		}
+		else if (file_info_list[0][0] == 'd')
+		{
+			ui.files_list->setItem(file_row, 0, new QTableWidgetItem(QIcon(":/icons/dir_icon"), file_info_list[8]));
+		}
+	}
 	QApplication::processEvents();
 }
 

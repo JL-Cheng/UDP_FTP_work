@@ -12,6 +12,7 @@
 #include<QString>
 #include<QFile>
 #include<QTextStream>
+#include<QRegExp>
 #include <QProgressBar>
 
 class ClientThread;
@@ -41,7 +42,8 @@ private:
 	Ui::FTP_client_GUIClass ui;
 
 	void init();//初始化各种设置
-	void addTaskListItem();//向任务列表添加item
+	void addTasksListItem();//向任务列表添加item
+	void setFilesList();//向任务列表添加item
 
 	QTcpSocket *m_socket = nullptr;//信息传输套接字
 	QTcpSocket *d_socket = nullptr;//数据传输套接字
@@ -49,11 +51,12 @@ private:
 
 	QString command_status = "";//记录现在的命令类型
 	QString connect_status = "";//记录现在的数据连接类型类型
+	QString files_list_string = "";//文件列表字符串
 	QString dest_IP = "";//PORT和PASV相关连接IP地址
 	QList<QProgressBar*> progress_bars;//进度条列表
 
 	QFile *file = nullptr;//读写的目标文件
-	int file_row = 0;//文件所在的列表行
+	int list_row = 0;//文件所在的列表行
 	int dest_port = 0;//PORT和PASV相关连接端口
 	int total_size = 0;//文件总大小
 	int read_size = 0;//文件读取的大小

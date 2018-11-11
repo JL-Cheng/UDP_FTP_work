@@ -279,14 +279,23 @@
          <property name="tabKeyNavigation">
           <bool>false</bool>
          </property>
+         <property name="showGrid">
+          <bool>false</bool>
+         </property>
          <attribute name="horizontalHeaderDefaultSectionSize">
           <number>150</number>
          </attribute>
          <attribute name="horizontalHeaderStretchLastSection">
           <bool>true</bool>
          </attribute>
+         <attribute name="verticalHeaderVisible">
+          <bool>false</bool>
+         </attribute>
          <attribute name="verticalHeaderDefaultSectionSize">
           <number>30</number>
+         </attribute>
+         <attribute name="verticalHeaderHighlightSections">
+          <bool>false</bool>
          </attribute>
          <column>
           <property name="text">
@@ -386,6 +395,9 @@
           <number>1</number>
          </property>
          <property name="tabKeyNavigation">
+          <bool>false</bool>
+         </property>
+         <property name="showGrid">
           <bool>false</bool>
          </property>
          <property name="columnCount">
