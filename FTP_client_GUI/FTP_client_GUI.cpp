@@ -15,6 +15,7 @@ void FTP_client_GUI::init()
 	d_server = new QTcpServer(this);
 
 	ui.connect_button->setEnabled(false);
+	ui.login_button->setEnabled(false);
 	ui.send_button->setEnabled(false);
 
 	//设置窗口属性
@@ -54,14 +55,26 @@ void FTP_client_GUI::init()
 		this, &FTP_client_GUI::enableConnectButton);
 	connect(ui.port_lineEdit, &QLineEdit::textChanged,
 		this, &FTP_client_GUI::enableConnectButton);
+
+	connect(ui.username_lineEdit, &QLineEdit::textChanged,
+		this, &FTP_client_GUI::enableLoginButton);
+	connect(ui.password_lineEdit, &QLineEdit::textChanged,
+		this, &FTP_client_GUI::enableLoginButton);
+
 	connect(ui.command_lineEdit, &QLineEdit::textChanged,
 		this, &FTP_client_GUI::enableSendButton);
+
 	//创建点击按钮的信号槽
 	connect(ui.connect_button, &QPushButton::clicked,
 		this, &FTP_client_GUI::connectOrDisconnect);
+	connect(ui.login_button, &QPushButton::clicked,
+		this, &FTP_client_GUI::login);
 	connect(ui.send_button, &QPushButton::clicked,
-		this, &FTP_client_GUI::sendMessage);
+		this, &FTP_client_GUI::clickSendButton);
 
+	//创建右键点击事件
+	connect(ui.files_list, &QWidget::customContextMenuRequested, 
+		this, &FTP_client_GUI::showFileActionsMenu);
 }
 
 void FTP_client_GUI::enableConnectButton()
@@ -70,9 +83,84 @@ void FTP_client_GUI::enableConnectButton()
 									!ui.port_lineEdit->text().isEmpty());
 }
 
+void FTP_client_GUI::enableLoginButton()
+{
+	ui.login_button->setEnabled(!ui.username_lineEdit->text().isEmpty() &&
+		!ui.password_lineEdit->text().isEmpty());
+}
+
 void FTP_client_GUI::enableSendButton()
 {
 	ui.send_button->setEnabled(!ui.command_lineEdit->text().isEmpty());
+}
+
+void FTP_client_GUI::showFileActionsMenu(QPoint pos)
+{
+	QModelIndex index = ui.files_list->indexAt(pos);
+	file_row = index.row();
+
+	QMenu *menu = new QMenu(ui.files_list);
+	QAction *act_refresh = new QAction("刷新", ui.files_list);
+	QAction *act_download = new QAction("下载", ui.files_list);
+	QAction *act_rename = new QAction("重命名", ui.files_list);
+
+	connect(act_refresh, &QAction::triggered, this, &FTP_client_GUI::refreshFilesList);
+	connect(act_download, &QAction::triggered, this, &FTP_client_GUI::downloadFile);
+
+	menu->addAction(act_refresh);
+	menu->addAction(act_download);
+	menu->addAction(act_rename);
+
+	menu->move(cursor().pos());
+	menu->show();
+}
+
+void FTP_client_GUI::refreshFilesList()
+{
+	QString text = ui.message_label->text();
+	if (m_socket->state() != 3)//未成功连接
+	{
+		text += tr("The connection was not established.\n");
+		ui.message_label->setText(text);
+		return;
+	}
+
+	this->next_command = "LIST";
+	this->next_param = "";
+	QString command = "PORT";
+	QString param = m_socket->localAddress().toString().replace(".", ",") + ",123,62";
+
+	this->sendMessage(command, param);
+}
+
+void FTP_client_GUI::downloadFile()
+{
+	QString text = ui.message_label->text();
+	if (m_socket->state() != 3)//未成功连接
+	{
+		text += tr("The connection was not established.\n");
+		ui.message_label->setText(text);
+		return;
+	}
+
+	QString filename = ui.files_list->item(file_row,0)->text();
+	QString type = ui.files_list->item(file_row, 2)->text();
+
+	if (type != "文件夹")
+	{
+		this->next_command = "RETR";
+		this->next_param = filename;
+		QString command = "PORT";
+		QString param = m_socket->localAddress().toString().replace(".", ",") + ",123,56";
+
+		this->sendMessage(command, param);
+	}
+	else
+	{
+		text += tr("Folder can not be downloaded.\n");
+		ui.message_label->setText(text);
+		return;
+	}	
 }
 
 void FTP_client_GUI::connectOrDisconnect()
@@ -87,12 +175,11 @@ void FTP_client_GUI::connectOrDisconnect()
 	else
 	{
 		//断开连接
-		int a = m_socket->state();
-		m_socket->disconnectFromHost();
+		this->sendMessage("QUIT");
 	}
 }
 
-void FTP_client_GUI::sendMessage()
+void FTP_client_GUI::login()
 {
 	QString text = ui.message_label->text();
 	if (m_socket->state() != 3)//未成功连接
@@ -101,125 +188,155 @@ void FTP_client_GUI::sendMessage()
 		ui.message_label->setText(text);
 		return;
 	}
-	else
-	{
-		QString command = ui.command_lineEdit->text().trimmed();
-		QString param = ui.param_lineEdit->text().trimmed();
-		QString send_message = command + " " + param + "\r\n";
+	QString username = ui.username_lineEdit->text().trimmed();
+	QString password = ui.password_lineEdit->text().trimmed();
 
-		//判断命令类型
-		if (command == "PORT")//如果是port指令,获取ip地址和端口号
-		{
-			QStringList str_list = param.split(',');
-			if (str_list.length() != 6)
-			{
-				text += tr("PORT params are wrong.\n");
-				ui.message_label->setText(text);
-				return;
-			}
-			dest_IP = str_list[0] + '.' + str_list[1] + '.' + str_list[2] + '.' + str_list[3];
-			dest_port = str_list[4].toInt() * 256 + str_list[5].toInt();
-			connect_status = "PORT";
-		}
-		if (command == "RETR")
-		{
-			read_size = 0;
-			total_size = 0;
-			QString file_name = param.split('/').last();
-			if (file)
-				file->close();
-			file = new QFile(file_name);
-			if (!file->open(QFile::WriteOnly))
-			{
-				text += tr("Open local file error.\n");
-				ui.message_label->setText(text);
-				return;
-			}
-			if (connect_status == "PORT")
-			{
-				if (d_server->isListening())
-					d_server->close();
-				if (!d_server->listen(QHostAddress::Any, dest_port))
-				{
-					text += tr("'PORT' data server listens error.\n");
-					ui.message_label->setText(text);
-					return;
-				}
-			}
-			else if (connect_status == "PASV")
-			{
-				d_socket->connectToHost(dest_IP, dest_port, QTcpSocket::ReadWrite);
-				//创建数据传输套接字信号槽
-				connect(d_socket, &QTcpSocket::readyRead, this, &FTP_client_GUI::readData);
-				connect(d_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
-					this, &FTP_client_GUI::displayError);
-			}
-		}
-		if (command == "STOR")
-		{
-			read_size = 0;
-			total_size = 0;
-			QString file_name = param;
-			if (file)
-				file->close();
-			file = new QFile(file_name);
-			if (!file->open(QFile::ReadOnly))
-			{
-				text += tr("Open local file error.\n");
-				ui.message_label->setText(text);
-				return;
-			}
-			total_size = file->size();
-			if (connect_status == "PORT")
-			{
-				if (d_server->isListening())
-					d_server->close();
-				if (!d_server->listen(QHostAddress::Any, dest_port))
-				{
-					text += tr("'PORT' data server listens error.\n");
-					ui.message_label->setText(text);
-					return;
-				}
-			}
-			else if (connect_status == "PASV")
-			{
-				d_socket->connectToHost(dest_IP, dest_port, QTcpSocket::ReadWrite);
-				//创建数据传输套接字信号槽
-				connect(d_socket, &QTcpSocket::readyRead, this, &FTP_client_GUI::readData);
-				connect(d_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
-					this, &FTP_client_GUI::displayError);
-			}
-		}
-		if (command == "LIST")
-		{
-			read_size = 0;
-			total_size = 0;
-			files_list_string = "";
-			if (connect_status == "PORT")
-			{
-				if (d_server->isListening())
-					d_server->close();
-				if (!d_server->listen(QHostAddress::Any, dest_port))
-				{
-					text += tr("'PORT' data server listens error.\n");
-					ui.message_label->setText(text);
-					return;
-				}
-			}
-			else if (connect_status == "PASV")
-			{
-				d_socket->connectToHost(dest_IP, dest_port, QTcpSocket::ReadWrite);
-				//创建数据传输套接字信号槽
-				connect(d_socket, &QTcpSocket::readyRead, this, &FTP_client_GUI::readData);
-				connect(d_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
-					this, &FTP_client_GUI::displayError);
-			}
-		}
-		command_status = command;
-		m_socket->write(QByteArray(send_message.toLatin1()));
-		m_socket->flush();
-		m_socket->waitForBytesWritten(300);
+	this->next_command = "PASS";
+	this->next_param = password;
+	this->sendMessage("USER", username);
+}
+
+void FTP_client_GUI::clickSendButton()
+{
+	QString text = ui.message_label->text();
+	if (m_socket->state() != 3)//未成功连接
+	{
+		text += tr("The connection was not established.\n");
+		ui.message_label->setText(text);
+		return;
 	}
+	QString command = ui.command_lineEdit->text().trimmed();
+	QString param = ui.param_lineEdit->text().trimmed();
+
+	if (command == "RETR" || command == "STOR" || command == "LIST")
+	{
+		this->next_command = command;
+		this->next_param = param;
+		command = "PORT";
+		param = m_socket->localAddress().toString().replace(".", ",") + ",123,56";
+	}
+	this->sendMessage(command, param);
+
+}
+
+void FTP_client_GUI::sendMessage(QString command, QString param)
+{
+	QString text = ui.message_label->text();
+	QString send_message = command + " " + param + "\r\n";
+
+	//判断命令类型
+	if (command == "PORT")//如果是port指令,获取ip地址和端口号
+	{
+		QStringList str_list = param.split(',');
+		if (str_list.length() != 6)
+		{
+			text += tr("PORT params are wrong.\n");
+			ui.message_label->setText(text);
+			return;
+		}
+		dest_IP = str_list[0] + '.' + str_list[1] + '.' + str_list[2] + '.' + str_list[3];
+		dest_port = str_list[4].toInt() * 256 + str_list[5].toInt();
+		connect_status = "PORT";
+	}
+	if (command == "RETR")
+	{
+		read_size = 0;
+		total_size = 0;
+		QString file_name = param.split('/').last();
+		if (file)
+			file->close();
+		file = new QFile(file_name);
+		if (!file->open(QFile::WriteOnly))
+		{
+			text += tr("Open local file error.\n");
+			ui.message_label->setText(text);
+			return;
+		}
+		if (connect_status == "PORT")
+		{
+			if (d_server->isListening())
+				d_server->close();
+			if (!d_server->listen(QHostAddress::Any, dest_port))
+			{
+				text += tr("'PORT' data server listens error.\n");
+				ui.message_label->setText(text);
+				return;
+			}
+		}
+		else if (connect_status == "PASV")
+		{
+			d_socket->connectToHost(dest_IP, dest_port, QTcpSocket::ReadWrite);
+			//创建数据传输套接字信号槽
+			connect(d_socket, &QTcpSocket::readyRead, this, &FTP_client_GUI::readData);
+			connect(d_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
+				this, &FTP_client_GUI::displayError);
+		}
+	}
+	if (command == "STOR")
+	{
+		read_size = 0;
+		total_size = 0;
+		QString file_name = param;
+		if (file)
+			file->close();
+		file = new QFile(file_name);
+		if (!file->open(QFile::ReadOnly))
+		{
+			text += tr("Open local file error.\n");
+			ui.message_label->setText(text);
+			return;
+		}
+		total_size = file->size();
+		if (connect_status == "PORT")
+		{
+			if (d_server->isListening())
+				d_server->close();
+			if (!d_server->listen(QHostAddress::Any, dest_port))
+			{
+				text += tr("'PORT' data server listens error.\n");
+				ui.message_label->setText(text);
+				return;
+			}
+		}
+		else if (connect_status == "PASV")
+		{
+			d_socket->connectToHost(dest_IP, dest_port, QTcpSocket::ReadWrite);
+			//创建数据传输套接字信号槽
+			connect(d_socket, &QTcpSocket::readyRead, this, &FTP_client_GUI::readData);
+			connect(d_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
+				this, &FTP_client_GUI::displayError);
+		}
+	}
+	if (command == "LIST")
+	{
+		read_size = 0;
+		total_size = 0;
+		files_list_string = "";
+		if (connect_status == "PORT")
+		{
+			if (d_server->isListening())
+				d_server->close();
+			if (!d_server->listen(QHostAddress::Any, dest_port))
+			{
+				text += tr("'PORT' data server listens error.\n");
+				ui.message_label->setText(text);
+				return;
+			}
+		}
+		else if (connect_status == "PASV")
+		{
+			d_socket->connectToHost(dest_IP, dest_port, QTcpSocket::ReadWrite);
+			//创建数据传输套接字信号槽
+			connect(d_socket, &QTcpSocket::readyRead, this, &FTP_client_GUI::readData);
+			connect(d_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
+				this, &FTP_client_GUI::displayError);
+		}
+	}
+	command_status = command;
+	m_socket->write(QByteArray(send_message.toLatin1()));
+	m_socket->flush();
+	m_socket->waitForBytesWritten(300);
+
 }
 
 void FTP_client_GUI::readMessage()
@@ -233,6 +350,31 @@ void FTP_client_GUI::readMessage()
 		ui.message_label->setText(text);
 
 		//判断返回信息
+		if (command_status == "USER")
+		{
+			if (message.split(' ')[0] == "331")
+			{
+				this->sendMessage(next_command, next_param);
+			}
+			next_command = "";
+			next_param = "";
+		}
+		if (command_status == "PASS")
+		{
+			if (message.split(' ')[0] == "230")
+			{
+				ui.login_button->setEnabled(false);
+			}
+		}
+		if (command_status == "PORT")
+		{
+			if (message.split(' ')[0] == "200")
+			{
+				this->sendMessage(next_command, next_param);
+			}
+			next_command = "";
+			next_param = "";
+		}
 		if (command_status == "PASV")
 		{
 			if (message.split(' ')[0] == "227")
@@ -243,7 +385,7 @@ void FTP_client_GUI::readMessage()
 				dest_port = str_list[4].toInt() * 256 + str_list[5].toInt();
 			}
 		}
-		else if (command_status == "RETR")
+		if (command_status == "RETR")
 		{
 			if (message.split(' ')[0]=="451" || message.split(' ')[0] == "426" || 
 				message.split(' ')[0] == "425"|| message.split(' ')[0] == "550")
@@ -269,7 +411,7 @@ void FTP_client_GUI::readMessage()
 				this->addTasksListItem();
 			}
 		}
-		else if (command_status == "STOR")
+		if (command_status == "STOR")
 		{
 			if (message.split(' ')[0] == "451" || message.split(' ')[0] == "426" ||
 				message.split(' ')[0] == "425" || message.split(' ')[0] == "550" )
@@ -295,7 +437,7 @@ void FTP_client_GUI::readMessage()
 				this->sendData();
 			}
 		}
-		else if (command_status == "LIST")
+		if (command_status == "LIST")
 		{
 			if (message.split(' ')[0] == "451" || message.split(' ')[0] == "426" ||
 				message.split(' ')[0] == "425" || message.split(' ')[0] == "550")
@@ -313,6 +455,14 @@ void FTP_client_GUI::readMessage()
 			else if (message.split(' ')[0] == "150")
 			{
 				total_size = message.split('(')[1].split(')')[0].toInt();
+			}
+		}
+		if (command_status == "QUIT")
+		{
+			if (message.split(' ')[0] == "221")
+			{
+				m_socket->disconnectFromHost();
+				m_socket->close();
 			}
 		}
 	}
@@ -338,7 +488,7 @@ void FTP_client_GUI::readData()
 			file->write(in_block);
 			file->flush();
 			read_size += in_block.size();
-			progress_bars[list_row]->setValue(read_size);
+			progress_bars[task_row]->setValue(read_size);
 			QApplication::processEvents();
 
 			m_socket->write(QByteArray(QString("finish\0").toLatin1()));
@@ -363,7 +513,6 @@ void FTP_client_GUI::readData()
 	}
 	else if (command_status == "LIST")
 	{
-		QString text = ui.message_label->text();
 		QByteArray in_block;
 		
 		in_block = d_socket->readAll();
@@ -376,8 +525,6 @@ void FTP_client_GUI::readData()
 
 		if (read_size == total_size)
 		{
-			text += files_list_string;
-			ui.message_label->setText(text);
 			this->setFilesList();
 
 			d_socket->flush();
@@ -414,7 +561,7 @@ void FTP_client_GUI::sendData()
 			d_socket->waitForBytesWritten(300);
 
 			read_size += out_block.size();
-			progress_bars[list_row]->setValue(read_size);
+			progress_bars[task_row]->setValue(read_size);
 			QApplication::processEvents();
 		}
 
@@ -437,12 +584,14 @@ void FTP_client_GUI::serverConnected()
 {
 	ui.connect_button->setText("断开连接");
 	ui.connect_button->setEnabled(true);
+	ui.login_button->setEnabled(true);
 }
 
 void FTP_client_GUI::serverDisconnected()
 {
 	ui.connect_button->setText("连接");
 	ui.connect_button->setEnabled(true);
+	ui.login_button->setEnabled(true);
 }
 
 void FTP_client_GUI::newDataConnect()
@@ -458,38 +607,53 @@ void FTP_client_GUI::newDataConnect()
 
 void FTP_client_GUI::addTasksListItem()
 {
-	list_row = ui.tasks_list->rowCount();
-	ui.tasks_list->setRowCount(list_row + 1);
-	ui.tasks_list->setItem(list_row, 0, new QTableWidgetItem(file->fileName()));
-	ui.tasks_list->setItem(list_row, 1, new QTableWidgetItem(QString::number(total_size)+"byte"));
-	ui.tasks_list->setItem(list_row, 2, new QTableWidgetItem((command_status=="RETR")?"下载":"上传"));
+	task_row = ui.tasks_list->rowCount();
+	ui.tasks_list->setRowCount(task_row + 1);
+	ui.tasks_list->setItem(task_row, 0, new QTableWidgetItem(file->fileName()));
+	ui.tasks_list->setItem(task_row, 1, new QTableWidgetItem(QString::number(total_size)+" byte"));
+	ui.tasks_list->setItem(task_row, 2, new QTableWidgetItem((command_status=="RETR")?"下载":"上传"));
 	QProgressBar *bar = new QProgressBar(ui.tasks_list);
 	bar->setTextVisible(true);
 	bar->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 	bar->setRange(0, total_size);
 	bar->setValue(0);
-	ui.tasks_list->setCellWidget(list_row, 3, bar);
+	ui.tasks_list->setCellWidget(task_row, 3, bar);
 	progress_bars.append(bar);
 	QApplication::processEvents();
 }
 
 void FTP_client_GUI::setFilesList()
 {
+	ui.files_list->clearContents();
+	ui.files_list->setRowCount(0);
 	QStringList files_list = files_list_string.split('\n');
-	int file_row = 0;
-	for (int i = 1; i < files_list.length(); i++)
+	file_row = 0;
+	for (int i = 1; i < files_list.size(); i++)
 	{
+		if (!files_list[i].size())
+			continue;
 		QStringList file_info_list = files_list[i].split(QRegExp("[\\s]+"));
 		file_row = ui.files_list->rowCount();
 		ui.files_list->setRowCount(file_row + 1);
 		if (file_info_list[0][0] == '-')
 		{
 			ui.files_list->setItem(file_row, 0, new QTableWidgetItem(QIcon(":/icons/file_icon"), file_info_list[8]));
+			if (file_info_list[8].contains("."))
+			{
+				ui.files_list->setItem(file_row, 2, new QTableWidgetItem(file_info_list[8].split('.').last() + " 文件"));
+			}
+			else
+			{
+				ui.files_list->setItem(file_row, 2, new QTableWidgetItem("文件"));
+			}
+			ui.files_list->setItem(file_row, 3, new QTableWidgetItem(file_info_list[4] + " byte"));
 		}
 		else if (file_info_list[0][0] == 'd')
 		{
 			ui.files_list->setItem(file_row, 0, new QTableWidgetItem(QIcon(":/icons/dir_icon"), file_info_list[8]));
+			ui.files_list->setItem(file_row, 2, new QTableWidgetItem("文件夹"));
 		}
+		ui.files_list->setItem(file_row, 1, new QTableWidgetItem(file_info_list[5] + " " + file_info_list[6] + " " + file_info_list[7]));
 	}
 	QApplication::processEvents();
 }

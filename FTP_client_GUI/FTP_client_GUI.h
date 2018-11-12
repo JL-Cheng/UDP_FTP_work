@@ -14,6 +14,8 @@
 #include<QTextStream>
 #include<QRegExp>
 #include <QProgressBar>
+#include <QAction>
+#include<QMenu>
 
 class ClientThread;
 
@@ -26,13 +28,20 @@ public:
 
 private slots:
 	void enableConnectButton();//可以点击连接按钮进行连接
+	void enableLoginButton();//可以点击登录按钮
 	void enableSendButton();//可以点击发送按钮发送数据
+
+	void showFileActionsMenu(QPoint pos);//右键点击显示菜单
+	void refreshFilesList();//刷新文件列表
+	void downloadFile();//下载文件
 	
 	void displayError(QAbstractSocket::SocketError socketError);//显示连接过程中的错误
 	void connectOrDisconnect();//点击连接按钮进行连接或者（点击断开连接按钮断开连接）
+	void login();//进行登录
+	void clickSendButton();//点击发送按钮
 	void serverConnected();//成功与服务器建立连接
 	void serverDisconnected();//与服务器断开连接
-	void sendMessage();//点击发送按钮发送信息
+	void sendMessage(QString command, QString param = "");//发送信息
 	void readMessage();//读取收到的信息
 	void newDataConnect();//建立新的数据连接
 	void readData();//读取收到的数据
@@ -50,13 +59,16 @@ private:
 	QTcpServer *d_server = nullptr;//PORT方式接受连接信号
 
 	QString command_status = "";//记录现在的命令类型
+	QString next_command = "";//记录下一个相关命令类型
+	QString next_param = "";//记录下一个相关命令参数
 	QString connect_status = "";//记录现在的数据连接类型类型
 	QString files_list_string = "";//文件列表字符串
 	QString dest_IP = "";//PORT和PASV相关连接IP地址
 	QList<QProgressBar*> progress_bars;//进度条列表
 
 	QFile *file = nullptr;//读写的目标文件
-	int list_row = 0;//文件所在的列表行
+	int task_row = 0;//任务所在的列表行
+	int file_row = 0;//文件所在的列表行
 	int dest_port = 0;//PORT和PASV相关连接端口
 	int total_size = 0;//文件总大小
 	int read_size = 0;//文件读取的大小
