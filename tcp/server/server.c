@@ -1488,6 +1488,7 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 							fclose(fp);
 							return -1;
 						}
+						start_write=0;
 					}
    				}
     				
