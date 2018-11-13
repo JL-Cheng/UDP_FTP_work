@@ -69,14 +69,14 @@ void FTP_client_GUI::init()
 		this, &FTP_client_GUI::connectOrDisconnect);
 	connect(ui.login_button, &QPushButton::clicked,
 		this, &FTP_client_GUI::login);
-	connect(ui.send_button, &QPushButton::clicked,
-		this, &FTP_client_GUI::clickSendButton);
 
-	//创建右键点击事件与item选择状态切换事件信号槽
+	//创建文件列表鼠标事件
 	connect(ui.files_list, &QWidget::customContextMenuRequested, 
 		this, &FTP_client_GUI::showFileActionsMenu);
 	connect(ui.files_list, &QTableWidget::itemSelectionChanged,
 		this, &FTP_client_GUI::closeFileItem);
+	connect(ui.files_list, &QTableWidget::itemDoubleClicked,
+		this, &FTP_client_GUI::enterWorkingDir);
 }
 
 void FTP_client_GUI::enableConnectButton()
@@ -98,21 +98,55 @@ void FTP_client_GUI::enableSendButton()
 
 void FTP_client_GUI::showFileActionsMenu(QPoint pos)
 {
-	QModelIndex index = ui.files_list->indexAt(pos);
-	file_row = index.row();
 
+	QModelIndex index = ui.files_list->indexAt(pos);
 	QMenu *menu = new QMenu(ui.files_list);
+	
 	QAction *act_refresh = new QAction("刷新", ui.files_list);
+	QAction *act_upload = new QAction("上传", ui.files_list);
 	QAction *act_download = new QAction("下载", ui.files_list);
 	QAction *act_rename = new QAction("重命名", ui.files_list);
+	QAction *act_back = new QAction("返回上级目录", ui.files_list);
+	QAction *act_makedir = new QAction("创建文件夹", ui.files_list);
+	QAction *act_removedir = new QAction("删除文件夹", ui.files_list);
 
 	connect(act_refresh, &QAction::triggered, this, &FTP_client_GUI::refreshFilesList);
+	connect(act_upload, &QAction::triggered, this, &FTP_client_GUI::uploadFile);
 	connect(act_download, &QAction::triggered, this, &FTP_client_GUI::downloadFile);
 	connect(act_rename, &QAction::triggered, this, &FTP_client_GUI::renameFile);
+	connect(act_back, &QAction::triggered, this, &FTP_client_GUI::backWorkingDir);
+	connect(act_makedir, &QAction::triggered, this, &FTP_client_GUI::makeWorkingDir);
+	connect(act_removedir, &QAction::triggered, this, &FTP_client_GUI::removeWorkingDir);
 
-	menu->addAction(act_refresh);
-	menu->addAction(act_download);
-	menu->addAction(act_rename);
+	if (index.row()>=0)
+	{
+		file_row = index.row();
+		QString type = ui.files_list->item(file_row, 2)->text();
+		if (type == "文件夹")
+		{
+			menu->addAction(act_refresh);
+			menu->addAction(act_upload);
+			menu->addAction(act_back);
+			menu->addAction(act_makedir);
+			menu->addAction(act_removedir);
+		}
+		else
+		{
+			menu->addAction(act_refresh);
+			menu->addAction(act_upload);
+			menu->addAction(act_download);
+			menu->addAction(act_rename);
+			menu->addAction(act_back);
+			menu->addAction(act_makedir);
+		}
+	}
+	else
+	{
+		menu->addAction(act_refresh);
+		menu->addAction(act_upload);
+		menu->addAction(act_back);
+		menu->addAction(act_makedir);
+	}
 
 	menu->move(cursor().pos());
 	menu->show();
@@ -120,11 +154,9 @@ void FTP_client_GUI::showFileActionsMenu(QPoint pos)
 
 void FTP_client_GUI::refreshFilesList()
 {
-	QString text = ui.message_label->text();
 	if (m_socket->state() != 3)//未成功连接
 	{
-		text += tr("The connection was not established.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("The connection was not established.\n"));
 		return;
 	}
 
@@ -136,13 +168,30 @@ void FTP_client_GUI::refreshFilesList()
 	this->sendMessage(command, param);
 }
 
-void FTP_client_GUI::downloadFile()
+void FTP_client_GUI::uploadFile()
 {
-	QString text = ui.message_label->text();
 	if (m_socket->state() != 3)//未成功连接
 	{
-		text += tr("The connection was not established.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("The connection was not established.\n"));
+		return;
+	}
+
+	QString filename = QFileDialog::getOpenFileName(NULL, "选择上传文件", ".");
+
+	this->next_command = "STOR";
+	this->next_param = filename;
+	QString command = "PORT";
+	QString param = m_socket->localAddress().toString().replace(".", ",") + ",123,56";
+
+	this->sendMessage(command, param);
+
+}
+
+void FTP_client_GUI::downloadFile()
+{
+	if (m_socket->state() != 3)//未成功连接
+	{
+		this->addNewText(tr("The connection was not established.\n"));
 		return;
 	}
 
@@ -160,19 +209,16 @@ void FTP_client_GUI::downloadFile()
 	}
 	else
 	{
-		text += tr("Folder can not be downloaded.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("Folder can not be downloaded.\n"));
 		return;
 	}	
 }
 
 void FTP_client_GUI::renameFile()
 {
-	QString text = ui.message_label->text();
 	if (m_socket->state() != 3)//未成功连接
 	{
-		text += tr("The connection was not established.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("The connection was not established.\n"));
 		return;
 	}
 
@@ -191,16 +237,106 @@ void FTP_client_GUI::renameFile()
 	}
 	else
 	{
-		text += tr("Folder can not be renamed.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("Folder can not be renamed.\n"));
 		return;
+	}
+}
+
+void FTP_client_GUI::enterWorkingDir(QTableWidgetItem * item)
+{
+	if (m_socket->state() != 3)//未成功连接
+	{
+		this->addNewText(tr("The connection was not established.\n"));
+		return;
+	}
+
+	int row = item->row();
+	QString dirname = ui.files_list->item(row, 0)->text();
+	QString type = ui.files_list->item(row, 2)->text();
+	if (type == "文件夹")
+	{
+		this->working_dir += dirname + "/";
+		this->sendMessage("CWD", this->working_dir);
+	}
+	else
+	{
+		this->addNewText(tr("File can not be entered.\n"));
+		return;
+	}
+
+}
+
+void FTP_client_GUI::makeWorkingDir()
+{
+	if (m_socket->state() != 3)//未成功连接
+	{
+		this->addNewText(tr("The connection was not established.\n"));
+		return;
+	}
+
+	file_row = ui.files_list->rowCount();
+	ui.files_list->setRowCount(file_row + 1);
+	//获得当前节点并获取编辑名称
+	QTableWidgetItem *selected_file_item = ui.files_list->item(file_row, 0);
+	ui.files_list->setCurrentCell(file_row, 0);
+	ui.files_list->openPersistentEditor(selected_file_item);
+	ui.files_list->editItem(selected_file_item);
+
+	this->next_command = "MKD";
+}
+
+void FTP_client_GUI::removeWorkingDir()
+{
+	if (m_socket->state() != 3)//未成功连接
+	{
+		this->addNewText(tr("The connection was not established.\n"));
+		return;
+	}
+
+	QString dirname = ui.files_list->item(file_row, 0)->text();
+	QString type = ui.files_list->item(file_row, 2)->text();
+
+	if (type == "文件夹")
+	{
+		QString command = "RMD";
+		QString param = dirname;
+		this->sendMessage(command, param);
+	}
+	else
+	{
+		this->addNewText(tr("File can not be removed.\n"));
+		return;
+	}
+}
+
+void FTP_client_GUI::backWorkingDir()
+{
+	if (m_socket->state() != 3)//未成功连接
+	{
+		this->addNewText(tr("The connection was not established.\n"));
+		return;
+	}
+
+	if (this->working_dir == "/")
+	{
+		this->addNewText(tr("It's in the root directory.\n"));
+		return;
+	}
+	else
+	{
+		QStringList temp_str_list = this->working_dir.split('/');
+		this->working_dir = "/";
+		for (int i = 1; i < temp_str_list.length() - 2; i++)
+		{
+			this->working_dir += temp_str_list[i] + "/";
+		}
+		this->sendMessage("CWD", this->working_dir);
 	}
 }
 
 void FTP_client_GUI::closeFileItem()
 {
 	QTableWidgetItem *selected_file_item = ui.files_list->item(file_row, 0);
-	QString text = ui.message_label->text();
 	if (selected_file_item != nullptr)
 	{
 		ui.files_list->closePersistentEditor(selected_file_item);
@@ -209,9 +345,9 @@ void FTP_client_GUI::closeFileItem()
 			QString new_filename = selected_file_item->text();
 			if (new_filename == "")
 			{
-				text += tr("New filename cannot be null.\n");
-				ui.message_label->setText(text);
+				this->addNewText(tr("New filename cannot be null.\n"));
 				selected_file_item->setText(old_filename);
+				this->next_command = "";
 			}
 			else
 			{
@@ -219,6 +355,20 @@ void FTP_client_GUI::closeFileItem()
 				this->sendMessage("RNFR", old_filename);
 			}
 			old_filename = "";
+		}
+		else if (this->next_command == "MKD")
+		{
+			QString dir_name = selected_file_item->text();
+			if (dir_name == "")
+			{
+				this->addNewText(tr("New dirname cannot be null.\n"));
+				ui.files_list->setRowCount(file_row);
+			}
+			else
+			{
+				this->sendMessage("MKD", dir_name);
+			}
+			this->next_command = "";
 		}
 	}
 	return;
@@ -242,11 +392,9 @@ void FTP_client_GUI::connectOrDisconnect()
 
 void FTP_client_GUI::login()
 {
-	QString text = ui.message_label->text();
 	if (m_socket->state() != 3)//未成功连接
 	{
-		text += tr("The connection was not established.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("The connection was not established.\n"));
 		return;
 	}
 	QString username = ui.username_lineEdit->text().trimmed();
@@ -257,32 +405,8 @@ void FTP_client_GUI::login()
 	this->sendMessage("USER", username);
 }
 
-void FTP_client_GUI::clickSendButton()
-{
-	QString text = ui.message_label->text();
-	if (m_socket->state() != 3)//未成功连接
-	{
-		text += tr("The connection was not established.\n");
-		ui.message_label->setText(text);
-		return;
-	}
-	QString command = ui.command_lineEdit->text().trimmed();
-	QString param = ui.param_lineEdit->text().trimmed();
-
-	if (command == "RETR" || command == "STOR" || command == "LIST")
-	{
-		this->next_command = command;
-		this->next_param = param;
-		command = "PORT";
-		param = m_socket->localAddress().toString().replace(".", ",") + ",123,56";
-	}
-	this->sendMessage(command, param);
-
-}
-
 void FTP_client_GUI::sendMessage(QString command, QString param)
 {
-	QString text = ui.message_label->text();
 	QString send_message = command + " " + param + "\r\n";
 
 	//判断命令类型
@@ -291,8 +415,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 		QStringList str_list = param.split(',');
 		if (str_list.length() != 6)
 		{
-			text += tr("PORT params are wrong.\n");
-			ui.message_label->setText(text);
+			this->addNewText(tr("PORT params are wrong.\n"));
 			return;
 		}
 		dest_IP = str_list[0] + '.' + str_list[1] + '.' + str_list[2] + '.' + str_list[3];
@@ -309,8 +432,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 		file = new QFile(file_name);
 		if (!file->open(QFile::WriteOnly))
 		{
-			text += tr("Open local file error.\n");
-			ui.message_label->setText(text);
+			this->addNewText(tr("Open local file error.\n"));
 			return;
 		}
 		if (connect_status == "PORT")
@@ -319,8 +441,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 				d_server->close();
 			if (!d_server->listen(QHostAddress::Any, dest_port))
 			{
-				text += tr("'PORT' data server listens error.\n");
-				ui.message_label->setText(text);
+				this->addNewText(tr("'PORT' data server listens error.\n"));
 				return;
 			}
 		}
@@ -343,8 +464,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 		file = new QFile(file_name);
 		if (!file->open(QFile::ReadOnly))
 		{
-			text += tr("Open local file error.\n");
-			ui.message_label->setText(text);
+			this->addNewText(tr("Open local file error.\n"));
 			return;
 		}
 		total_size = file->size();
@@ -354,8 +474,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 				d_server->close();
 			if (!d_server->listen(QHostAddress::Any, dest_port))
 			{
-				text += tr("'PORT' data server listens error.\n");
-				ui.message_label->setText(text);
+				this->addNewText(tr("'PORT' data server listens error.\n"));
 				return;
 			}
 		}
@@ -379,8 +498,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 				d_server->close();
 			if (!d_server->listen(QHostAddress::Any, dest_port))
 			{
-				text += tr("'PORT' data server listens error.\n");
-				ui.message_label->setText(text);
+				this->addNewText(tr("'PORT' data server listens error.\n"));
 				return;
 			}
 		}
@@ -403,12 +521,10 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 void FTP_client_GUI::readMessage()
 {
 	QString message;
-	QString text = ui.message_label->text();
 	while (m_socket->bytesAvailable()>0)
 	{
 		message = QString(m_socket->readLine(1024));
-		text += QString(message);
-		ui.message_label->setText(text);
+		this->addNewText(QString(message));
 
 		//判断返回信息
 		if (command_status == "USER")
@@ -498,6 +614,10 @@ void FTP_client_GUI::readMessage()
 				this->addTasksListItem();
 				this->sendData();
 			}
+			else if (message.split(' ')[0] == "226")
+			{
+				this->refreshFilesList();
+			}
 		}
 		else if (command_status == "LIST")
 		{
@@ -518,6 +638,10 @@ void FTP_client_GUI::readMessage()
 			{
 				total_size = message.split('(')[1].split(')')[0].toInt();
 			}
+			else if (message.split(' ')[0] == "226")
+			{
+				this->sendMessage("PWD");
+			}
 		}
 		else if (command_status == "RNFR")
 		{
@@ -529,6 +653,36 @@ void FTP_client_GUI::readMessage()
 			this->next_param = "";
 		}
 		else if (command_status == "RNTO")
+		{
+			this->refreshFilesList();
+		}
+		else if (command_status == "PWD")
+		{
+			if (message.split(' ')[0] == "257")
+			{
+				this->working_dir = message.split(':')[1].split('.')[0];
+				ui.files_list_label->setText(tr("文件列表（当前目录为%1）：").arg(this->working_dir));
+			}
+		}
+		else if (command_status == "CWD")
+		{
+			if (message.split(' ')[0] == "250")
+			{
+				this->refreshFilesList();
+			}
+		}
+		else if (command_status == "MKD")
+		{
+			if (message.split(' ')[0] == "257")
+			{
+				this->refreshFilesList();
+			}
+			else
+			{
+				ui.files_list->setRowCount(file_row);
+			}
+		}
+		else if (command_status == "RMD")
 		{
 			if (message.split(' ')[0] == "250")
 			{
@@ -550,11 +704,9 @@ void FTP_client_GUI::readData()
 {
 	if (command_status == "RETR")
 	{
-		QString text = ui.message_label->text();
 		if (!file)
 		{
-			text += tr("Something wrong with the file.\n");
-			ui.message_label->setText(text);
+			this->addNewText(tr("Something wrong with the file.\n"));
 			d_socket->readAll();
 			return;
 		}
@@ -619,11 +771,9 @@ void FTP_client_GUI::readData()
 
 void FTP_client_GUI::sendData()
 {
-	QString text = ui.message_label->text();
 	if (!file)
 	{
-		text += tr("Something wrong with the file.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("Something wrong with the file.\n"));
 		d_socket->readAll();
 		return;
 	}
@@ -747,25 +897,28 @@ void FTP_client_GUI::setFilesList()
 	QApplication::processEvents();
 }
 
-void FTP_client_GUI::displayError(QAbstractSocket::SocketError socketError)
+void FTP_client_GUI::addNewText(QString newtext)
 {
 	QString text = ui.message_label->text();
+	text += newtext;
+	ui.message_label->setText(text);
+	ui.scrollArea->verticalScrollBar()->setValue(ui.scrollArea->verticalScrollBar()->maximum());
+}
 
+void FTP_client_GUI::displayError(QAbstractSocket::SocketError socketError)
+{
 	switch (socketError)
 	{
 	case QAbstractSocket::RemoteHostClosedError:
 		break;
 	case QAbstractSocket::HostNotFoundError:
-		text += tr("The host was not found.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("The host was not found.\n"));
 		break;
 	case QAbstractSocket::ConnectionRefusedError:
-		text += tr("The connection was refused by the peer.\n");
-		ui.message_label->setText(text);
+		this->addNewText(tr("The connection was refused by the peer.\n"));
 		break;
 	default:
-		text += tr("The following error occurred: %1.\n").arg(m_socket->errorString());
-		ui.message_label->setText(text);
+		this->addNewText(tr("The following error occurred: %1.\n").arg(m_socket->errorString()));
 	}
 
 	ui.connect_button->setEnabled(true);
