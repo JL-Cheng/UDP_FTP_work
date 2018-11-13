@@ -438,6 +438,12 @@
        </item>
        <item>
         <widget class="QTableWidget" name="tasks_list">
+         <property name="minimumSize">
+          <size>
+           <width>657</width>
+           <height>180</height>
+          </size>
+         </property>
          <property name="font">
           <font>
            <family>黑体</family>
@@ -445,6 +451,9 @@
          </property>
          <property name="lineWidth">
           <number>1</number>
+         </property>
+         <property name="sizeAdjustPolicy">
+          <enum>QAbstractScrollArea::AdjustToContents</enum>
          </property>
          <property name="tabKeyNavigation">
           <bool>false</bool>
@@ -476,6 +485,9 @@
          <attribute name="verticalHeaderDefaultSectionSize">
           <number>30</number>
          </attribute>
+         <attribute name="verticalHeaderMinimumSectionSize">
+          <number>30</number>
+         </attribute>
          <column>
           <property name="text">
            <string>文件名</string>
@@ -486,7 +498,7 @@
            </font>
           </property>
           <property name="textAlignment">
-           <set>AlignLeading|AlignBottom</set>
+           <set>AlignLeading|AlignVCenter</set>
           </property>
          </column>
          <column>
@@ -499,7 +511,7 @@
            </font>
           </property>
           <property name="textAlignment">
-           <set>AlignLeading|AlignBottom</set>
+           <set>AlignLeading|AlignVCenter</set>
           </property>
          </column>
          <column>
@@ -512,7 +524,7 @@
            </font>
           </property>
           <property name="textAlignment">
-           <set>AlignLeading|AlignBottom</set>
+           <set>AlignLeading|AlignVCenter</set>
           </property>
          </column>
          <column>
@@ -525,7 +537,7 @@
            </font>
           </property>
           <property name="textAlignment">
-           <set>AlignLeading|AlignBottom</set>
+           <set>AlignLeading|AlignVCenter</set>
           </property>
          </column>
         </widget>

@@ -72,9 +72,11 @@ void FTP_client_GUI::init()
 	connect(ui.send_button, &QPushButton::clicked,
 		this, &FTP_client_GUI::clickSendButton);
 
-	//创建右键点击事件
+	//创建右键点击事件与item选择状态切换事件信号槽
 	connect(ui.files_list, &QWidget::customContextMenuRequested, 
 		this, &FTP_client_GUI::showFileActionsMenu);
+	connect(ui.files_list, &QTableWidget::itemSelectionChanged,
+		this, &FTP_client_GUI::closeFileItem);
 }
 
 void FTP_client_GUI::enableConnectButton()
@@ -106,6 +108,7 @@ void FTP_client_GUI::showFileActionsMenu(QPoint pos)
 
 	connect(act_refresh, &QAction::triggered, this, &FTP_client_GUI::refreshFilesList);
 	connect(act_download, &QAction::triggered, this, &FTP_client_GUI::downloadFile);
+	connect(act_rename, &QAction::triggered, this, &FTP_client_GUI::renameFile);
 
 	menu->addAction(act_refresh);
 	menu->addAction(act_download);
@@ -161,6 +164,64 @@ void FTP_client_GUI::downloadFile()
 		ui.message_label->setText(text);
 		return;
 	}	
+}
+
+void FTP_client_GUI::renameFile()
+{
+	QString text = ui.message_label->text();
+	if (m_socket->state() != 3)//未成功连接
+	{
+		text += tr("The connection was not established.\n");
+		ui.message_label->setText(text);
+		return;
+	}
+
+	//获得当前节点并获取编辑名称
+	QTableWidgetItem *selected_file_item = ui.files_list->item(file_row, 0);
+	ui.files_list->setCurrentCell(file_row, 0);
+	ui.files_list->openPersistentEditor(selected_file_item);
+	ui.files_list->editItem(selected_file_item);
+
+	QString type = ui.files_list->item(file_row, 2)->text();
+
+	if (type != "文件夹")
+	{
+		this->next_command = "RNTO";
+		old_filename = ui.files_list->item(file_row, 0)->text();
+	}
+	else
+	{
+		text += tr("Folder can not be renamed.\n");
+		ui.message_label->setText(text);
+		return;
+	}
+}
+
+void FTP_client_GUI::closeFileItem()
+{
+	QTableWidgetItem *selected_file_item = ui.files_list->item(file_row, 0);
+	QString text = ui.message_label->text();
+	if (selected_file_item != nullptr)
+	{
+		ui.files_list->closePersistentEditor(selected_file_item);
+		if (this->next_command == "RNTO")
+		{
+			QString new_filename = selected_file_item->text();
+			if (new_filename == "")
+			{
+				text += tr("New filename cannot be null.\n");
+				ui.message_label->setText(text);
+				selected_file_item->setText(old_filename);
+			}
+			else
+			{
+				this->next_param = new_filename;
+				this->sendMessage("RNFR", old_filename);
+			}
+			old_filename = "";
+		}
+	}
+	return;
 }
 
 void FTP_client_GUI::connectOrDisconnect()
@@ -238,7 +299,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 		dest_port = str_list[4].toInt() * 256 + str_list[5].toInt();
 		connect_status = "PORT";
 	}
-	if (command == "RETR")
+	else if (command == "RETR")
 	{
 		read_size = 0;
 		total_size = 0;
@@ -272,7 +333,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 				this, &FTP_client_GUI::displayError);
 		}
 	}
-	if (command == "STOR")
+	else if (command == "STOR")
 	{
 		read_size = 0;
 		total_size = 0;
@@ -307,7 +368,7 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 				this, &FTP_client_GUI::displayError);
 		}
 	}
-	if (command == "LIST")
+	else if (command == "LIST")
 	{
 		read_size = 0;
 		total_size = 0;
@@ -354,28 +415,29 @@ void FTP_client_GUI::readMessage()
 		{
 			if (message.split(' ')[0] == "331")
 			{
-				this->sendMessage(next_command, next_param);
+				this->sendMessage(this->next_command, this->next_param);
 			}
-			next_command = "";
-			next_param = "";
+			this->next_command = "";
+			this->next_param = "";
 		}
-		if (command_status == "PASS")
+		else if (command_status == "PASS")
 		{
 			if (message.split(' ')[0] == "230")
 			{
 				ui.login_button->setEnabled(false);
+				this->refreshFilesList();
 			}
 		}
-		if (command_status == "PORT")
+		else if (command_status == "PORT")
 		{
 			if (message.split(' ')[0] == "200")
 			{
-				this->sendMessage(next_command, next_param);
+				this->sendMessage(this->next_command, this->next_param);
 			}
-			next_command = "";
-			next_param = "";
+			this->next_command = "";
+			this->next_param = "";
 		}
-		if (command_status == "PASV")
+		else if (command_status == "PASV")
 		{
 			if (message.split(' ')[0] == "227")
 			{
@@ -385,7 +447,7 @@ void FTP_client_GUI::readMessage()
 				dest_port = str_list[4].toInt() * 256 + str_list[5].toInt();
 			}
 		}
-		if (command_status == "RETR")
+		else if (command_status == "RETR")
 		{
 			if (message.split(' ')[0]=="451" || message.split(' ')[0] == "426" || 
 				message.split(' ')[0] == "425"|| message.split(' ')[0] == "550")
@@ -411,7 +473,7 @@ void FTP_client_GUI::readMessage()
 				this->addTasksListItem();
 			}
 		}
-		if (command_status == "STOR")
+		else if (command_status == "STOR")
 		{
 			if (message.split(' ')[0] == "451" || message.split(' ')[0] == "426" ||
 				message.split(' ')[0] == "425" || message.split(' ')[0] == "550" )
@@ -437,7 +499,7 @@ void FTP_client_GUI::readMessage()
 				this->sendData();
 			}
 		}
-		if (command_status == "LIST")
+		else if (command_status == "LIST")
 		{
 			if (message.split(' ')[0] == "451" || message.split(' ')[0] == "426" ||
 				message.split(' ')[0] == "425" || message.split(' ')[0] == "550")
@@ -457,7 +519,23 @@ void FTP_client_GUI::readMessage()
 				total_size = message.split('(')[1].split(')')[0].toInt();
 			}
 		}
-		if (command_status == "QUIT")
+		else if (command_status == "RNFR")
+		{
+			if (message.split(' ')[0] == "350")
+			{
+				this->sendMessage(this->next_command, this->next_param);
+			}
+			this->next_command = "";
+			this->next_param = "";
+		}
+		else if (command_status == "RNTO")
+		{
+			if (message.split(' ')[0] == "250")
+			{
+				this->refreshFilesList();
+			}
+		}
+		else if (command_status == "QUIT")
 		{
 			if (message.split(' ')[0] == "221")
 			{
@@ -655,9 +733,19 @@ void FTP_client_GUI::setFilesList()
 		}
 		ui.files_list->setItem(file_row, 1, new QTableWidgetItem(file_info_list[5] + " " + file_info_list[6] + " " + file_info_list[7]));
 	}
+	for (int i = 0; i<ui.files_list->rowCount(); i++) 
+	{
+		for (int j = 0; j<ui.files_list->columnCount(); j++) 
+		{
+			if (ui.files_list->item(i, j) != NULL) 
+			{
+				ui.files_list->item(i, j)->setFlags(ui.files_list->item(i, j)->flags() & (~Qt::ItemIsEditable));
+				ui.files_list->item(i, j)->setFlags(ui.files_list->item(i, j)->flags() & (~Qt::ItemIsSelectable));
+			}
+		}
+	}
 	QApplication::processEvents();
 }
-
 
 void FTP_client_GUI::displayError(QAbstractSocket::SocketError socketError)
 {

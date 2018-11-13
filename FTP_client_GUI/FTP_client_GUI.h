@@ -34,6 +34,8 @@ private slots:
 	void showFileActionsMenu(QPoint pos);//右键点击显示菜单
 	void refreshFilesList();//刷新文件列表
 	void downloadFile();//下载文件
+	void renameFile();//重命名文件
+	void closeFileItem();//关闭选择的文件列表item
 	
 	void displayError(QAbstractSocket::SocketError socketError);//显示连接过程中的错误
 	void connectOrDisconnect();//点击连接按钮进行连接或者（点击断开连接按钮断开连接）
@@ -64,6 +66,7 @@ private:
 	QString connect_status = "";//记录现在的数据连接类型类型
 	QString files_list_string = "";//文件列表字符串
 	QString dest_IP = "";//PORT和PASV相关连接IP地址
+	QString old_filename = "";//旧文件名
 	QList<QProgressBar*> progress_bars;//进度条列表
 
 	QFile *file = nullptr;//读写的目标文件
