@@ -16,7 +16,6 @@ void FTP_client_GUI::init()
 
 	ui.connect_button->setEnabled(false);
 	ui.login_button->setEnabled(false);
-	ui.send_button->setEnabled(false);
 
 	//设置窗口属性
 	this->setFixedSize(700, 850);
@@ -61,9 +60,6 @@ void FTP_client_GUI::init()
 	connect(ui.password_lineEdit, &QLineEdit::textChanged,
 		this, &FTP_client_GUI::enableLoginButton);
 
-	connect(ui.command_lineEdit, &QLineEdit::textChanged,
-		this, &FTP_client_GUI::enableSendButton);
-
 	//创建点击按钮的信号槽
 	connect(ui.connect_button, &QPushButton::clicked,
 		this, &FTP_client_GUI::connectOrDisconnect);
@@ -77,6 +73,9 @@ void FTP_client_GUI::init()
 		this, &FTP_client_GUI::closeFileItem);
 	connect(ui.files_list, &QTableWidget::itemDoubleClicked,
 		this, &FTP_client_GUI::enterWorkingDir);
+
+	//创建帮助菜单动作
+	connect(ui.act_help, &QAction::triggered, this, &FTP_client_GUI::showHelp);
 }
 
 void FTP_client_GUI::enableConnectButton()
@@ -89,11 +88,6 @@ void FTP_client_GUI::enableLoginButton()
 {
 	ui.login_button->setEnabled(!ui.username_lineEdit->text().isEmpty() &&
 		!ui.password_lineEdit->text().isEmpty());
-}
-
-void FTP_client_GUI::enableSendButton()
-{
-	ui.send_button->setEnabled(!ui.command_lineEdit->text().isEmpty());
 }
 
 void FTP_client_GUI::showFileActionsMenu(QPoint pos)
@@ -403,6 +397,33 @@ void FTP_client_GUI::login()
 	this->next_command = "PASS";
 	this->next_param = password;
 	this->sendMessage("USER", username);
+}
+
+void FTP_client_GUI::showHelp()
+{
+	QString helpText =
+		"1 输入正确的ip地址和端口号，点击连接按钮进行连接；\n"\
+		"2 输入用户名和密码进行登录；\n"\
+		"3 在文件列表中双击文件夹可以进入对应目录；\n"\
+		"4 在文件目录中点击右键会出现如下选项：\n"\
+		"	4.1 刷新：重新获取当前目录的文件列表；\n"\
+		"	4.2 上传：选择文件上传到服务器；\n"\
+		"	4.3 返回上级目录：返回到上一级目录；\n"\
+		"	4.4 创建文件夹：在当前目录中创建文件夹；\n"\
+		"	4.5 刷新：重新获取当前目录的文件列表；\n"\
+		"	4.6 下载（只对文件有效）：下载文件到目录；\n"\
+		"	4.7 重命名（只对文件有效）：对文件重命名；\n"\
+		"	4.8 删除文件夹（只对空文件夹有效）：\n"\
+		"	      删除选中的文件夹；\n";
+
+
+	QMessageBox message;
+	message.setWindowTitle(tr("帮助"));
+	message.setText(helpText);
+	message.setIcon(QMessageBox::Information);
+	message.addButton(tr("OK懂了~"), QMessageBox::ActionRole);
+	message.exec();
+
 }
 
 void FTP_client_GUI::sendMessage(QString command, QString param)
@@ -847,6 +868,15 @@ void FTP_client_GUI::addTasksListItem()
 	bar->setValue(0);
 	ui.tasks_list->setCellWidget(task_row, 3, bar);
 	progress_bars.append(bar);
+
+	for (int j = 0; j < 4; j++)
+	{
+		if (ui.tasks_list->item(task_row, j) != NULL)
+		{
+			ui.tasks_list->item(task_row, j)->setFlags(ui.tasks_list->item(task_row, j)->flags() & (~Qt::ItemIsEditable));
+			ui.tasks_list->item(task_row, j)->setFlags(ui.tasks_list->item(task_row, j)->flags() & (~Qt::ItemIsSelectable));
+		}
+	}
 	QApplication::processEvents();
 }
 

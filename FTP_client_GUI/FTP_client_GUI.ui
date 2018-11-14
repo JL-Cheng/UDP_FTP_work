@@ -35,26 +35,6 @@
     <layout class="QVBoxLayout" name="verticalLayout_11">
      <item>
       <layout class="QGridLayout" name="gridLayout_2">
-       <item row="1" column="5">
-        <widget class="QLineEdit" name="password_lineEdit">
-         <property name="text">
-          <string>@anonymous</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="4">
-        <widget class="QLabel" name="label_10">
-         <property name="font">
-          <font>
-           <family>黑体</family>
-           <pointsize>9</pointsize>
-          </font>
-         </property>
-         <property name="text">
-          <string>Port端口号：</string>
-         </property>
-        </widget>
-       </item>
        <item row="1" column="2">
         <widget class="QLineEdit" name="username_lineEdit">
          <property name="text">
@@ -64,34 +44,6 @@
        </item>
        <item row="0" column="2">
         <widget class="QLineEdit" name="IP_lineEdit"/>
-       </item>
-       <item row="0" column="5">
-        <widget class="QLineEdit" name="port_lineEdit"/>
-       </item>
-       <item row="1" column="6">
-        <widget class="QPushButton" name="login_button">
-         <property name="font">
-          <font>
-           <family>黑体</family>
-          </font>
-         </property>
-         <property name="text">
-          <string>登录</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QLabel" name="label_11">
-         <property name="font">
-          <font>
-           <family>黑体</family>
-           <pointsize>9</pointsize>
-          </font>
-         </property>
-         <property name="text">
-          <string>用户名：</string>
-         </property>
-        </widget>
        </item>
        <item row="0" column="6">
         <widget class="QPushButton" name="connect_button">
@@ -114,6 +66,38 @@
          </property>
         </widget>
        </item>
+       <item row="1" column="5">
+        <widget class="QLineEdit" name="password_lineEdit">
+         <property name="text">
+          <string>@anonymous</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLabel" name="label_11">
+         <property name="font">
+          <font>
+           <family>黑体</family>
+           <pointsize>9</pointsize>
+          </font>
+         </property>
+         <property name="text">
+          <string>用户名：</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="6">
+        <widget class="QPushButton" name="login_button">
+         <property name="font">
+          <font>
+           <family>黑体</family>
+          </font>
+         </property>
+         <property name="text">
+          <string>登录</string>
+         </property>
+        </widget>
+       </item>
        <item row="1" column="4">
         <widget class="QLabel" name="label_13">
          <property name="font">
@@ -127,6 +111,22 @@
          </property>
         </widget>
        </item>
+       <item row="0" column="4">
+        <widget class="QLabel" name="label_10">
+         <property name="font">
+          <font>
+           <family>黑体</family>
+           <pointsize>9</pointsize>
+          </font>
+         </property>
+         <property name="text">
+          <string>Port端口号：</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="5">
+        <widget class="QLineEdit" name="port_lineEdit"/>
+       </item>
        <item row="0" column="1">
         <widget class="QLabel" name="label_12">
          <property name="font">
@@ -137,50 +137,6 @@
          </property>
          <property name="text">
           <string>IP地址：</string>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="6">
-        <widget class="QPushButton" name="send_button">
-         <property name="font">
-          <font>
-           <family>黑体</family>
-          </font>
-         </property>
-         <property name="text">
-          <string>发送</string>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="5">
-        <widget class="QLineEdit" name="param_lineEdit"/>
-       </item>
-       <item row="3" column="1">
-        <widget class="QLabel" name="label_17">
-         <property name="font">
-          <font>
-           <family>黑体</family>
-           <pointsize>9</pointsize>
-          </font>
-         </property>
-         <property name="text">
-          <string>命令：</string>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="2">
-        <widget class="QLineEdit" name="command_lineEdit"/>
-       </item>
-       <item row="3" column="4">
-        <widget class="QLabel" name="label_18">
-         <property name="font">
-          <font>
-           <family>黑体</family>
-           <pointsize>9</pointsize>
-          </font>
-         </property>
-         <property name="text">
-          <string>参数：</string>
          </property>
         </widget>
        </item>
@@ -550,6 +506,28 @@
     </layout>
    </widget>
   </widget>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>700</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menu">
+    <property name="title">
+     <string>使用说明</string>
+    </property>
+    <addaction name="act_help"/>
+   </widget>
+   <addaction name="menu"/>
+  </widget>
+  <action name="act_help">
+   <property name="text">
+    <string>help</string>
+   </property>
+  </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <resources>

@@ -18,6 +18,7 @@
 #include <QAction>
 #include<QMenu>
 #include<QFileDialog>
+#include<QMessageBox>
 
 class ClientThread;
 
@@ -31,7 +32,6 @@ public:
 private slots:
 	void enableConnectButton();//可以点击连接按钮进行连接
 	void enableLoginButton();//可以点击登录按钮
-	void enableSendButton();//可以点击发送按钮发送数据
 
 	void showFileActionsMenu(QPoint pos);//右键点击显示菜单
 	void refreshFilesList();//刷新文件列表
@@ -54,6 +54,8 @@ private slots:
 	void newDataConnect();//建立新的数据连接
 	void readData();//读取收到的数据
 	void sendData();//传输数据
+
+	void showHelp();//显示帮助提示
 	
 private:
 	Ui::FTP_client_GUIClass ui;
