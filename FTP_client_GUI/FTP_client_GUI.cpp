@@ -18,7 +18,7 @@ void FTP_client_GUI::init()
 	ui.login_button->setEnabled(false);
 
 	//ÉèÖÃ´°¿ÚÊôÐÔ
-	this->setFixedSize(700, 850);
+	this->setFixedSize(700, 900);
 	this->setWindowOpacity(1);
 	this->setWindowTitle("FTP client");
 
@@ -734,17 +734,29 @@ void FTP_client_GUI::readData()
 		else
 		{
 			QByteArray in_block;
-
 			in_block = d_socket->readAll();
+
+			if (first_recv)
+			{
+				pack_size = QString(in_block.mid(0, 10)).toInt();
+				in_block = in_block.mid(10);
+				first_recv = false;
+			}
+						
 			file->write(in_block);
 			file->flush();
 			read_size += in_block.size();
+			pack_size -= in_block.size();
 			progress_bars[task_row]->setValue(read_size);
 			QApplication::processEvents();
 
-			m_socket->write(QByteArray(QString("finish\0").toLatin1()));
-			m_socket->flush();
-			m_socket->waitForBytesWritten(300);
+			if (!pack_size)
+			{
+				m_socket->write(QByteArray(QString("finish\0").toLatin1()));
+				m_socket->flush();
+				m_socket->waitForBytesWritten(300);
+				first_recv = true;
+			}
 
 			if (read_size == total_size)
 			{

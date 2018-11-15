@@ -85,5 +85,8 @@ private:
 	int dest_port = 0;//PORT和PASV相关连接端口
 	int total_size = 0;//文件总大小
 	int read_size = 0;//文件读取的大小
+	int pack_size = 0;//包的大小
+	bool first_recv = true;//第一次接到包
+
 
 };
