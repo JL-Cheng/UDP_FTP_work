@@ -22,7 +22,7 @@
  * =============================================
  */
 #define MAX_SIZE 1024
-#define COMMAND_NUM 16
+#define COMMAND_NUM 17
 
 char *CLIENT_INSTRUCTION[]=
 {
@@ -33,7 +33,8 @@ char *CLIENT_INSTRUCTION[]=
 	"PASV", "MKD", 
 	"CWD", "PWD",
 	"LIST", "RMD", 
-	"RNFR", "RNTO" 
+	"RNFR", "RNTO",
+	"REST" 
 };
 
 

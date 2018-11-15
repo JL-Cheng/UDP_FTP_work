@@ -345,10 +345,13 @@ void server_process(int controlfd)
 	char cmd[5];//客户端命令（verb）
 	char param[MAX_SIZE];//客户端命令参数
 	
+	int file_flag=0;//文件位置
+	
 	char prompt1[] = "220 Anonymous FTP server ready.\r\n";
 	char prompt2[] = "502 Please use valid command.\r\n";
 	char prompt3[] = "215 UNIX Type: L8\r\n";
 	char prompt4[] = "221 Goodbye.\r\n";
+	char prompt5[] = "350 Wait for next operation.\r\n";
 
 	//首先返回成功连接信号
 	printf("success_connect\n");
@@ -409,7 +412,7 @@ void server_process(int controlfd)
 		//若是RETR指令
 		else if(!(strcmp(cmd,"RETR")))
 		{
-			if(server_retr(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd))
+			if(server_retr(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd,file_flag))
 			{
 				printf("Send file wrong.\n");
 			}
@@ -424,6 +427,7 @@ void server_process(int controlfd)
 				is_PASV=0;
 				PASV_listenfd=-1;
 			}
+			file_flag = 0;
 			continue;
 		}
 		//若是STOR指令
@@ -520,6 +524,13 @@ void server_process(int controlfd)
 		else if(!(strcmp(cmd,"PWD")))
 		{
 			server_pwd(controlfd,param);
+			continue;
+		}
+		//若是REST指令
+		else if(!(strcmp(cmd,"REST")))
+		{
+			send_data(controlfd,prompt5,strlen(prompt5));
+			file_flag = atoi(param);
 			continue;
 		}
 		//若是其他命令
@@ -938,7 +949,7 @@ int server_pasv(int controlfd)
  * -PASV_listenfd：PASV监听端口
  * 返回值：正确返回0,否则返回-1。
  */
-int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd)
+int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd,int file_flag)
 {
 	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
 	char prompt2[] = "425 Can't open data connection.\r\n";
@@ -982,7 +993,14 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		send_data(controlfd,prompt3,strlen(prompt3));
 		return -1;
 	}		
-	filefd = fileno(fp);		
+	filefd = fileno(fp);
+	printf("file_flag:%d\n",file_flag);
+	if(lseek(filefd,file_flag,SEEK_SET)==-1)
+	{
+		send_data(controlfd,prompt3,strlen(prompt3));
+		return -1;
+	}
+			
         struct stat statbuf;
         stat(filename,&statbuf);
         int size=statbuf.st_size;

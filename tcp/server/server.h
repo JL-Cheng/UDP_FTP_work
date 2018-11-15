@@ -26,8 +26,8 @@
  */
 #define DEFAULT_PORT 21
 #define DEFAULT_ROOT "/tmp"
-#define MAX_SIZE 1024
-#define COMMAND_NUM 16
+#define MAX_SIZE 1024*1024
+#define COMMAND_NUM 17
 
 char *CLIENT_INSTRUCTION[]=
 {
@@ -38,7 +38,8 @@ char *CLIENT_INSTRUCTION[]=
 	"PASV", "MKD", 
 	"CWD", "PWD",
 	"LIST", "RMD", 
-	"RNFR", "RNTO" 
+	"RNFR", "RNTO",
+	"REST"
 };
 int PORT = DEFAULT_PORT;
 char FILE_ROOT[200];
@@ -85,7 +86,7 @@ int server_port(int controlfd,char *param,char *ip,int *port);
 int server_pasv(int controlfd);
 
 //服务器RETR命令控制函数
-int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd);
+int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd,int file_flag);
 
 //服务器STOR命令控制函数
 int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd);
