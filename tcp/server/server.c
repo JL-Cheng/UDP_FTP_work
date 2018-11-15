@@ -1118,11 +1118,13 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 						fclose(fp);
 						return -1;
 					}
-					sprintf(data, "%10d",num_read);
-					printf("data:%s\n",data);
-					strcat(data,temp);
-					num_read=num_read+10;
-						
+					else if(num_read > 0)
+					{
+						sprintf(data, "%10d",num_read);
+						printf("data:%s\n",data);
+						strcat(data,temp);
+						num_read=num_read+10;
+					}						
 					//如果接口可写
 					if(FD_ISSET(datafd, &wfds))
 					{
