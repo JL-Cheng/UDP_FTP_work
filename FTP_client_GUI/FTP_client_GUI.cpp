@@ -116,6 +116,17 @@ void FTP_client_GUI::showFileActionsMenu(QPoint pos)
 	connect(act_makedir, &QAction::triggered, this, &FTP_client_GUI::makeWorkingDir);
 	connect(act_removedir, &QAction::triggered, this, &FTP_client_GUI::removeWorkingDir);
 
+	if (d_socket->state() != 0)
+	{
+		act_refresh->setEnabled(false);
+		act_upload->setEnabled(false);
+		act_download->setEnabled(false);
+		act_rename->setEnabled(false);
+		act_back->setEnabled(false);
+		act_makedir->setEnabled(false);
+		act_removedir->setEnabled(false);
+	}
+
 	if (index.row()>=0)
 	{
 		file_row = index.row();
@@ -383,6 +394,11 @@ void FTP_client_GUI::showTaskActionsMenu(QPoint pos)
 
 	connect(act_continue_download, &QAction::triggered, this, &FTP_client_GUI::continueDownloadTask);
 	connect(act_stop_download, &QAction::triggered, this, &FTP_client_GUI::stopDownloadTask);
+
+	if (d_socket->state() != 0)
+		act_continue_download->setEnabled(false);
+	else
+		act_stop_download->setEnabled(false);
 
 	if (index.row() >= 0)
 	{
@@ -870,15 +886,21 @@ void FTP_client_GUI::readData()
 			if (read_size == total_size)
 			{
 				// Close connect
-				d_socket->flush();
-				d_socket->disconnectFromHost();
-				d_socket->close();
-				file->close();
-				file = nullptr;
+				if (d_socket->state() != 0)
+				{
+					d_socket->disconnectFromHost();
+					d_socket->close();
+
+				}
+				if (file)
+				{
+					file->close();
+					file = nullptr;
+				}
 				read_size = 0;
 				total_size = 0;
-				pack_size = 0;
 				first_recv = true;
+				pack_size = 0;
 				continue_recv = false;
 				connect_status = "";
 			}
