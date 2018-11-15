@@ -74,6 +74,10 @@ void FTP_client_GUI::init()
 	connect(ui.files_list, &QTableWidget::itemDoubleClicked,
 		this, &FTP_client_GUI::enterWorkingDir);
 
+	//创建任务列表鼠标事件
+	connect(ui.tasks_list, &QWidget::customContextMenuRequested,
+		this, &FTP_client_GUI::showTaskActionsMenu);
+
 	//创建帮助菜单动作
 	connect(ui.act_help, &QAction::triggered, this, &FTP_client_GUI::showHelp);
 }
@@ -368,6 +372,74 @@ void FTP_client_GUI::closeFileItem()
 	return;
 }
 
+void FTP_client_GUI::showTaskActionsMenu(QPoint pos)
+{
+
+	QModelIndex index = ui.tasks_list->indexAt(pos);
+	QMenu *menu = new QMenu(ui.tasks_list);
+
+	QAction *act_continue_download = new QAction("继续下载", ui.tasks_list);
+	QAction *act_stop_download = new QAction("停止下载", ui.tasks_list);
+
+	connect(act_continue_download, &QAction::triggered, this, &FTP_client_GUI::continueDownloadTask);
+	connect(act_stop_download, &QAction::triggered, this, &FTP_client_GUI::stopDownloadTask);
+
+	if (index.row() >= 0)
+	{
+		task_row = index.row();
+		menu->addAction(act_continue_download);
+		menu->addAction(act_stop_download);
+	}
+
+	menu->move(cursor().pos());
+	menu->show();
+}
+
+void FTP_client_GUI::continueDownloadTask()
+{
+	if (m_socket->state() != 3)//未成功连接
+	{
+		this->addNewText(tr("The connection was not established.\n"));
+		return;
+	}
+
+	QString filename = ui.tasks_list->item(task_row, 0)->text();
+	QFile temp_file(filename);
+	if (!temp_file.exists())
+	{
+		this->addNewText(tr("The file doesn't exist.\n"));
+		return;
+	}
+
+	continue_recv = true;
+	this->sendMessage("REST", QString::number(temp_file.size()));
+
+}
+
+void FTP_client_GUI::stopDownloadTask()
+{
+	m_socket->write(QByteArray(QString("stop\0").toLatin1()));
+	m_socket->flush();
+	m_socket->waitForBytesWritten(300);
+	if (d_socket->state() != 0)
+	{
+		d_socket->disconnectFromHost();
+		d_socket->close();
+
+	}
+	if (file)
+	{
+		file->close();
+		file = nullptr;
+	}
+	read_size = 0;
+	total_size = 0;
+	first_recv = true;
+	pack_size = 0;
+	continue_recv = false;
+	connect_status = "";
+}
+
 void FTP_client_GUI::connectOrDisconnect()
 {
 	if (!m_socket->state())
@@ -379,7 +451,6 @@ void FTP_client_GUI::connectOrDisconnect()
 	}
 	else
 	{
-		//断开连接
 		this->sendMessage("QUIT");
 	}
 }
@@ -406,15 +477,18 @@ void FTP_client_GUI::showHelp()
 		"2 输入用户名和密码进行登录；\n"\
 		"3 在文件列表中双击文件夹可以进入对应目录；\n"\
 		"4 在文件目录中点击右键会出现如下选项：\n"\
-		"	4.1 刷新：重新获取当前目录的文件列表；\n"\
-		"	4.2 上传：选择文件上传到服务器；\n"\
-		"	4.3 返回上级目录：返回到上一级目录；\n"\
-		"	4.4 创建文件夹：在当前目录中创建文件夹；\n"\
-		"	4.5 刷新：重新获取当前目录的文件列表；\n"\
-		"	4.6 下载（只对文件有效）：下载文件到目录；\n"\
-		"	4.7 重命名（只对文件有效）：对文件重命名；\n"\
-		"	4.8 删除文件夹（只对空文件夹有效）：\n"\
-		"	      删除选中的文件夹；\n";
+		"  4.1 刷新：重新获取当前目录的文件列表；\n"\
+		"  4.2 上传：选择文件上传到服务器；\n"\
+		"  4.3 返回上级目录：返回到上一级目录；\n"\
+		"  4.4 创建文件夹：在当前目录中创建文件夹；\n"\
+		"  4.5 刷新：重新获取当前目录的文件列表；\n"\
+		"  4.6 下载（只对文件有效）：下载文件到目录；\n"\
+		"  4.7 重命名（只对文件有效）：对文件重命名；\n"\
+		"  4.8 删除文件夹（只对空文件夹有效）：\n"\
+		"         删除选中的文件夹；\n"\
+		"5 在任务目录中点击右键会出现如下选项：\n"\
+		"  5.1 停止下载：终止文件下载；\n"\
+		"  5.2 继续下载：进行断点续传；\n";
 
 
 	QMessageBox message;
@@ -451,11 +525,26 @@ void FTP_client_GUI::sendMessage(QString command, QString param)
 		if (file)
 			file->close();
 		file = new QFile(file_name);
-		if (!file->open(QFile::WriteOnly))
+
+		if (continue_recv)
 		{
-			this->addNewText(tr("Open local file error.\n"));
-			return;
+			if (!file->open(QFile::WriteOnly | QIODevice::Append))
+			{
+				this->addNewText(tr("Open local file error.\n"));
+				return;
+			}
+			read_size = file->size();
+			file->seek(file->size());
 		}
+		else
+		{
+			if (!file->open(QFile::WriteOnly))
+			{
+				this->addNewText(tr("Open local file error.\n"));
+				return;
+			}
+		}
+
 		if (connect_status == "PORT")
 		{
 			if (d_server->isListening())
@@ -602,12 +691,18 @@ void FTP_client_GUI::readMessage()
 				}
 				read_size = 0;
 				total_size = 0;
+				first_recv = true;
+				pack_size = 0;
+				continue_recv = false;
 				connect_status = "";
 			}
 			else if (message.split(' ')[0] == "150")
 			{
 				total_size = message.split('(')[1].split(')')[0].toInt();
-				this->addTasksListItem();
+				if (!continue_recv)
+				{
+					this->addTasksListItem();
+				}
 			}
 		}
 		else if (command_status == "STOR")
@@ -718,6 +813,20 @@ void FTP_client_GUI::readMessage()
 				m_socket->close();
 			}
 		}
+		else if (command_status == "REST")
+		{
+			if (message.split(' ')[0] == "350")
+			{
+				QString filename = ui.tasks_list->item(task_row, 0)->text();
+
+				this->next_command = "RETR";
+				this->next_param = filename;
+				QString command = "PORT";
+				QString param = m_socket->localAddress().toString().replace(".", ",") + ",123,56";
+
+				this->sendMessage(command, param);
+			}
+		}
 	}
 }
 
@@ -768,6 +877,9 @@ void FTP_client_GUI::readData()
 				file = nullptr;
 				read_size = 0;
 				total_size = 0;
+				pack_size = 0;
+				first_recv = true;
+				continue_recv = false;
 				connect_status = "";
 			}
 			return;

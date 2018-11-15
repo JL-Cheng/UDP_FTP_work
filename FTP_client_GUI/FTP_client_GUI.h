@@ -43,7 +43,11 @@ private slots:
 	void backWorkingDir();//返回上一级目录
 	void enterWorkingDir(QTableWidgetItem* item);//改变工作目录
 	void closeFileItem();//关闭选择的文件列表item
-	
+
+	void showTaskActionsMenu(QPoint pos);//右键点击显示菜单
+	void continueDownloadTask();//继续下载任务
+	void stopDownloadTask();//停止下载任务
+
 	void displayError(QAbstractSocket::SocketError socketError);//显示连接过程中的错误
 	void connectOrDisconnect();//点击连接按钮进行连接或者（点击断开连接按钮断开连接）
 	void login();//进行登录
@@ -87,6 +91,6 @@ private:
 	int read_size = 0;//文件读取的大小
 	int pack_size = 0;//包的大小
 	bool first_recv = true;//第一次接到包
-
+	bool continue_recv = false;//断点续传
 
 };
