@@ -1484,6 +1484,12 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 
 						start_write=1;
 					}
+					else if(!strcmp(data,"stop"))
+					{
+						close(datafd);
+						fclose(fp);
+						return -1;	
+					}
 					printf("back:%s\n",data);
 					memset(data,0,MAX_SIZE);
 					num_read = 0;
