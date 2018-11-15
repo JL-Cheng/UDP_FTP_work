@@ -953,6 +953,7 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	int start_write = 1;	
 	FILE* fp = NULL;
 	char data[MAX_SIZE];
+	char temp[MAX_SIZE];
 	char filename[200];
 	int num_read = 0;
 	fd_set rfds,wfds; //读写文件句柄
@@ -1090,7 +1091,7 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 				if(start_write&&FD_ISSET(filefd, &rfds))
 				{
 					//读文件内容
-					num_read = fread(data, 1, MAX_SIZE, fp);
+					num_read = fread(temp, 1, MAX_SIZE-100, fp);
 					printf("num_read:%d\n",num_read);
 					if (num_read < 0) 
 					{
@@ -1099,6 +1100,10 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 						fclose(fp);
 						return -1;
 					}
+					sprintf(data, "%10d",num_read);
+					printf("data:%s\n",data);
+					strcat(data,temp);
+					num_read=num_read+10;
 						
 					//如果接口可写
 					if(FD_ISSET(datafd, &wfds))
@@ -1112,6 +1117,8 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 							return -1;
 						}
 						start_write=0;
+						memset(data,0,MAX_SIZE);
+						memset(temp,0,MAX_SIZE);
 					}
    				}
     				
