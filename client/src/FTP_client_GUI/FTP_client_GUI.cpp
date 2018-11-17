@@ -860,6 +860,7 @@ void FTP_client_GUI::readData()
 		{
 			this->addNewText(tr("Something wrong with the file.\n"));
 			d_socket->readAll();
+			ui.connect_button->setEnabled(true);
 			return;
 		}
 		else
@@ -910,9 +911,8 @@ void FTP_client_GUI::readData()
 				continue_recv = false;
 				connect_status = "";
 				ui.connect_button->setEnabled(true);
+				return;
 			}
-			return;
-
 		}
 	}
 	else if (command_status == "LIST")
@@ -937,9 +937,9 @@ void FTP_client_GUI::readData()
 			read_size = 0;
 			total_size = 0;
 			connect_status = "";
+			ui.connect_button->setEnabled(true);
+			return;
 		}
-		return;
-
 	}
 }
 
