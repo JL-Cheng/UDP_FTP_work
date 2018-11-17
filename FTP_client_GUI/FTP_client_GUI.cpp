@@ -49,7 +49,7 @@ void FTP_client_GUI::init()
 	connect(d_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
 		this, &FTP_client_GUI::displayError);
 	//创建数据传输监听套接字信号槽
-	connect(d_server,&QTcpServer::newConnection,this,&FTP_client_GUI::newDataConnect);
+	connect(d_server, &QTcpServer::newConnection, this, &FTP_client_GUI::newDataConnect);
 
 	//创建按钮状态转换的信号槽
 	connect(ui.IP_lineEdit, &QLineEdit::textChanged,
@@ -69,7 +69,7 @@ void FTP_client_GUI::init()
 		this, &FTP_client_GUI::login);
 
 	//创建文件列表鼠标事件
-	connect(ui.files_list, &QWidget::customContextMenuRequested, 
+	connect(ui.files_list, &QWidget::customContextMenuRequested,
 		this, &FTP_client_GUI::showFileActionsMenu);
 	connect(ui.files_list, &QTableWidget::itemSelectionChanged,
 		this, &FTP_client_GUI::closeFileItem);
@@ -87,7 +87,7 @@ void FTP_client_GUI::init()
 void FTP_client_GUI::enableConnectButton()
 {
 	ui.connect_button->setEnabled(!ui.IP_lineEdit->text().isEmpty() &&
-									!ui.port_lineEdit->text().isEmpty());
+		!ui.port_lineEdit->text().isEmpty());
 }
 
 void FTP_client_GUI::enableLoginButton()
@@ -101,7 +101,7 @@ void FTP_client_GUI::showFileActionsMenu(QPoint pos)
 
 	QModelIndex index = ui.files_list->indexAt(pos);
 	QMenu *menu = new QMenu(ui.files_list);
-	
+
 	QAction *act_refresh = new QAction("刷新", ui.files_list);
 	QAction *act_upload = new QAction("上传", ui.files_list);
 	QAction *act_download = new QAction("下载", ui.files_list);
@@ -129,7 +129,7 @@ void FTP_client_GUI::showFileActionsMenu(QPoint pos)
 		act_removedir->setEnabled(false);
 	}
 
-	if (index.row()>=0)
+	if (index.row() >= 0)
 	{
 		file_row = index.row();
 		QString type = ui.files_list->item(file_row, 2)->text();
@@ -206,7 +206,7 @@ void FTP_client_GUI::downloadFile()
 		return;
 	}
 
-	QString filename = ui.files_list->item(file_row,0)->text();
+	QString filename = ui.files_list->item(file_row, 0)->text();
 	QString type = ui.files_list->item(file_row, 2)->text();
 
 	if (type != "文件夹")
@@ -222,7 +222,7 @@ void FTP_client_GUI::downloadFile()
 	{
 		this->addNewText(tr("Folder can not be downloaded.\n"));
 		return;
-	}	
+	}
 }
 
 void FTP_client_GUI::renameFile()
@@ -697,8 +697,8 @@ void FTP_client_GUI::readMessage()
 		}
 		else if (command_status == "RETR")
 		{
-			if (message.split(' ')[0]=="451" || message.split(' ')[0] == "426" || 
-				message.split(' ')[0] == "425"|| message.split(' ')[0] == "550")
+			if (message.split(' ')[0] == "451" || message.split(' ')[0] == "426" ||
+				message.split(' ')[0] == "425" || message.split(' ')[0] == "550")
 			{
 				if (d_socket->state() != 0)
 				{
@@ -730,7 +730,7 @@ void FTP_client_GUI::readMessage()
 		else if (command_status == "STOR")
 		{
 			if (message.split(' ')[0] == "451" || message.split(' ')[0] == "426" ||
-				message.split(' ')[0] == "425" || message.split(' ')[0] == "550" )
+				message.split(' ')[0] == "425" || message.split(' ')[0] == "550")
 			{
 				if (d_socket->state() != 0)
 				{
@@ -860,6 +860,7 @@ void FTP_client_GUI::readData()
 		{
 			this->addNewText(tr("Something wrong with the file.\n"));
 			d_socket->readAll();
+			ui.connect_button->setEnabled(true);
 			return;
 		}
 		else
@@ -873,7 +874,7 @@ void FTP_client_GUI::readData()
 				in_block = in_block.mid(10);
 				first_recv = false;
 			}
-						
+
 			file->write(in_block);
 			file->flush();
 			read_size += in_block.size();
@@ -910,15 +911,14 @@ void FTP_client_GUI::readData()
 				continue_recv = false;
 				connect_status = "";
 				ui.connect_button->setEnabled(true);
+				return;
 			}
-			return;
-
 		}
 	}
 	else if (command_status == "LIST")
 	{
 		QByteArray in_block;
-		
+
 		in_block = d_socket->readAll();
 		files_list_string += QString(in_block);
 		read_size += in_block.size();
@@ -937,9 +937,9 @@ void FTP_client_GUI::readData()
 			read_size = 0;
 			total_size = 0;
 			connect_status = "";
+			ui.connect_button->setEnabled(true);
+			return;
 		}
-		return;
-
 	}
 }
 
@@ -954,7 +954,7 @@ void FTP_client_GUI::sendData()
 	else
 	{
 		QByteArray out_block;
-		
+
 		while (read_size != total_size)
 		{
 			out_block = file->read(1024);
@@ -1020,13 +1020,13 @@ void FTP_client_GUI::addTasksListItem()
 	}
 	else if (total_size > 1024 && total_size < 1024 * 1024)
 	{
-		ui.tasks_list->setItem(task_row, 1, new QTableWidgetItem(QString::number(total_size/1024) + " KB"));
+		ui.tasks_list->setItem(task_row, 1, new QTableWidgetItem(QString::number(total_size / 1024) + " KB"));
 	}
 	else if (total_size > 1024 * 1024)
 	{
 		ui.tasks_list->setItem(task_row, 1, new QTableWidgetItem(QString::number(total_size / 1024 / 1024) + " MB"));
 	}
-	ui.tasks_list->setItem(task_row, 2, new QTableWidgetItem((command_status=="RETR")?"下载":"上传"));
+	ui.tasks_list->setItem(task_row, 2, new QTableWidgetItem((command_status == "RETR") ? "下载" : "上传"));
 	QProgressBar *bar = new QProgressBar(ui.tasks_list);
 	bar->setTextVisible(true);
 	bar->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -1093,11 +1093,11 @@ void FTP_client_GUI::setFilesList()
 		}
 		ui.files_list->setItem(file_row, 1, new QTableWidgetItem(file_info_list[5] + " " + file_info_list[6] + " " + file_info_list[7]));
 	}
-	for (int i = 0; i<ui.files_list->rowCount(); i++) 
+	for (int i = 0; i<ui.files_list->rowCount(); i++)
 	{
-		for (int j = 0; j<ui.files_list->columnCount(); j++) 
+		for (int j = 0; j<ui.files_list->columnCount(); j++)
 		{
-			if (ui.files_list->item(i, j) != NULL) 
+			if (ui.files_list->item(i, j) != NULL)
 			{
 				ui.files_list->item(i, j)->setFlags(ui.files_list->item(i, j)->flags() & (~Qt::ItemIsEditable));
 				ui.files_list->item(i, j)->setFlags(ui.files_list->item(i, j)->flags() & (~Qt::ItemIsSelectable));
