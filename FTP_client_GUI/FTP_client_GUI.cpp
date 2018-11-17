@@ -22,6 +22,8 @@ void FTP_client_GUI::init()
 	this->setWindowOpacity(1);
 	this->setWindowTitle("FTP client");
 
+	ui.IP_lineEdit->setFocus();
+
 	//设置任务列表显示
 	ui.tasks_list->horizontalHeader()->setStretchLastSection(true);
 	ui.tasks_list->setColumnWidth(0, 150);
@@ -403,8 +405,12 @@ void FTP_client_GUI::showTaskActionsMenu(QPoint pos)
 	if (index.row() >= 0)
 	{
 		task_row = index.row();
-		menu->addAction(act_continue_download);
-		menu->addAction(act_stop_download);
+		QString type = ui.tasks_list->item(task_row, 2)->text();
+		if (type == "下载")
+		{
+			menu->addAction(act_continue_download);
+			menu->addAction(act_stop_download);
+		}
 	}
 
 	menu->move(cursor().pos());
@@ -903,6 +909,7 @@ void FTP_client_GUI::readData()
 				pack_size = 0;
 				continue_recv = false;
 				connect_status = "";
+				ui.connect_button->setEnabled(true);
 			}
 			return;
 
@@ -994,6 +1001,8 @@ void FTP_client_GUI::newDataConnect()
 	auto socket_temp = d_server->nextPendingConnection();
 	d_socket = socket_temp;
 
+	ui.connect_button->setEnabled(false);
+
 	//创建数据传输套接字信号槽
 	connect(d_socket, &QTcpSocket::readyRead, this, &FTP_client_GUI::readData);
 	connect(d_socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
@@ -1005,7 +1014,18 @@ void FTP_client_GUI::addTasksListItem()
 	task_row = ui.tasks_list->rowCount();
 	ui.tasks_list->setRowCount(task_row + 1);
 	ui.tasks_list->setItem(task_row, 0, new QTableWidgetItem(file->fileName()));
-	ui.tasks_list->setItem(task_row, 1, new QTableWidgetItem(QString::number(total_size)+" byte"));
+	if (total_size < 1024)
+	{
+		ui.tasks_list->setItem(task_row, 1, new QTableWidgetItem(QString::number(total_size) + " byte"));
+	}
+	else if (total_size > 1024 && total_size < 1024 * 1024)
+	{
+		ui.tasks_list->setItem(task_row, 1, new QTableWidgetItem(QString::number(total_size/1024) + " KB"));
+	}
+	else if (total_size > 1024 * 1024)
+	{
+		ui.tasks_list->setItem(task_row, 1, new QTableWidgetItem(QString::number(total_size / 1024 / 1024) + " MB"));
+	}
 	ui.tasks_list->setItem(task_row, 2, new QTableWidgetItem((command_status=="RETR")?"下载":"上传"));
 	QProgressBar *bar = new QProgressBar(ui.tasks_list);
 	bar->setTextVisible(true);
@@ -1032,6 +1052,7 @@ void FTP_client_GUI::setFilesList()
 	ui.files_list->setRowCount(0);
 	QStringList files_list = files_list_string.split('\n');
 	file_row = 0;
+	int file_size = 0;
 	for (int i = 1; i < files_list.size(); i++)
 	{
 		if (!files_list[i].size())
@@ -1050,7 +1071,20 @@ void FTP_client_GUI::setFilesList()
 			{
 				ui.files_list->setItem(file_row, 2, new QTableWidgetItem("文件"));
 			}
-			ui.files_list->setItem(file_row, 3, new QTableWidgetItem(file_info_list[4] + " byte"));
+			file_size = file_info_list[4].toInt();
+			if (file_size < 1024)
+			{
+				ui.files_list->setItem(file_row, 3, new QTableWidgetItem(QString::number(file_size) + " byte"));
+			}
+			else if (file_size > 1024 && file_size < 1024 * 1024)
+			{
+				ui.files_list->setItem(file_row, 3, new QTableWidgetItem(QString::number(file_size / 1024) + " KB"));
+			}
+			else if (file_size > 1024 * 1024)
+			{
+				ui.files_list->setItem(file_row, 3, new QTableWidgetItem(QString::number(file_size / 1024 / 1024) + " MB"));
+			}
+
 		}
 		else if (file_info_list[0][0] == 'd')
 		{
