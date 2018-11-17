@@ -326,10 +326,13 @@ void server_process(int controlfd)
 	char cmd[5];//客户端命令（verb）
 	char param[MAX_SIZE];//客户端命令参数
 	
+	int file_flag=0;//文件位置
+	
 	char prompt1[] = "220 Anonymous FTP server ready.\r\n";
 	char prompt2[] = "502 Please use valid command.\r\n";
 	char prompt3[] = "215 UNIX Type: L8\r\n";
 	char prompt4[] = "221 Goodbye.\r\n";
+	char prompt5[] = "350 Wait for next operation.\r\n";
 
 	//首先返回成功连接信号
 	send_data(controlfd,prompt1,strlen(prompt1));
@@ -387,7 +390,7 @@ void server_process(int controlfd)
 		//若是RETR指令
 		else if(!(strcmp(cmd,"RETR")))
 		{
-			server_retr(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd);
+			server_retr(controlfd,param,is_PORT,PORT_ip,PORT_port,is_PASV,PASV_listenfd,file_flag);
 			if(is_PORT)
 			{
 				is_PORT=0;
@@ -399,6 +402,7 @@ void server_process(int controlfd)
 				is_PASV=0;
 				PASV_listenfd=-1;
 			}
+			file_flag = 0;
 			continue;
 		}
 		//若是STOR指令
@@ -489,6 +493,13 @@ void server_process(int controlfd)
 		else if(!(strcmp(cmd,"PWD")))
 		{
 			server_pwd(controlfd,param);
+			continue;
+		}
+		//若是REST指令
+		else if(!(strcmp(cmd,"REST")))
+		{
+			send_data(controlfd,prompt5,strlen(prompt5));
+			file_flag = atoi(param);
 			continue;
 		}
 		//若是其他命令
@@ -895,22 +906,24 @@ int server_pasv(int controlfd)
  * -PASV_listenfd：PASV监听端口
  * 返回值：正确返回0,否则返回-1。
  */
-int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd)
+int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_port,int is_PASV,int PASV_listenfd,int file_flag)
 {
 	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
 	char prompt2[] = "425 Can't open data connection.\r\n";
 	char prompt3[] = "550 Requested file action not taken.\r\n";
-	char prompt4[] = "150 Data connection already open; transfer starting.\r\n";
+	char prompt4[100];
 	char prompt5[] = "451 Requested action aborted: local error in processing.\r\n";
 	char prompt6[] = "426 Connection closed; transfer aborted.\r\n";
 	char prompt7[] = "226 Closing data connection.\r\n";
 	
 	int datafd = -1;
-	int filefd = -1;	
+	int filefd = -1;
+	int start_write = 1;	
 	FILE* fp = NULL;
 	char data[MAX_SIZE];
+	char temp[MAX_SIZE];
 	char filename[200];
-	int num_read;
+	int num_read = 0;
 	fd_set rfds,wfds; //读写文件句柄
 	struct timeval timeout={3,0}; //select等待3秒
 	int maxfd = 0;
@@ -928,14 +941,26 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 		filename[strlen(filename)]='/';
 	else if(filename[strlen(filename)-1]=='/' && param[0]=='/')
 		filename[strlen(filename)-1]='\0';
-	strcat(filename,param);		
+	strcat(filename,param);						
+       
 	fp = fopen(filename, "rb"); 
 	if (!fp)
 	{
 		send_data(controlfd,prompt3,strlen(prompt3));
 		return -1;
 	}		
-	filefd = fileno(fp);		
+	filefd = fileno(fp);
+	if(lseek(filefd,file_flag,SEEK_SET)==-1)
+	{
+		send_data(controlfd,prompt3,strlen(prompt3));
+		return -1;
+	}
+			
+        struct stat statbuf;
+        stat(filename,&statbuf);
+        int size=statbuf.st_size;
+        sprintf(prompt4,"150 Data connection already open; transfer starting.The file's size is (%d).\r\n",size);
+
 	
 	//建立数据连接
 	if(is_PORT)
@@ -999,9 +1024,11 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
    		FD_ZERO(&wfds);
    		//添加描述符 
 		FD_SET(datafd,&wfds); 
+		FD_SET(controlfd,&rfds);
 		FD_SET(filefd,&rfds); 
 		//描述符最大值加1 
 		maxfd=datafd>filefd?datafd+1:filefd+1; 
+		maxfd=maxfd>(controlfd+1)?maxfd:(controlfd+1);
 			
 		//使用select判断状态
 		switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
@@ -1015,11 +1042,23 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 			case 0:
 				break;
 			default:
+				if(FD_ISSET(controlfd,&rfds))
+				{
+					memset(data,0,MAX_SIZE);
+					num_read=recv(controlfd,data,MAX_SIZE,0);
+					if(!strcmp(data,"finish"))
+					{
+
+						start_write=1;
+					}
+					memset(data,0,MAX_SIZE);
+					num_read = 0;
+				}
 				//如果文件可读
-				if(FD_ISSET(filefd, &rfds))
+				if(start_write&&FD_ISSET(filefd, &rfds))
 				{
 					//读文件内容
-					num_read = fread(data, 1, MAX_SIZE, fp);
+					num_read = fread(temp, 1, MAX_SIZE-100, fp);
 					if (num_read < 0) 
 					{
 						send_data(controlfd,prompt5,strlen(prompt5));
@@ -1027,7 +1066,12 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 						fclose(fp);
 						return -1;
 					}
-						
+					else if(num_read > 0)
+					{
+						sprintf(data, "%10d",num_read);
+						strcat(data,temp);
+						num_read=num_read+10;
+					}						
 					//如果接口可写
 					if(FD_ISSET(datafd, &wfds))
 					{
@@ -1039,6 +1083,9 @@ int server_retr(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 							fclose(fp);
 							return -1;
 						}
+						start_write=0;
+						memset(data,0,MAX_SIZE);
+						memset(temp,0,MAX_SIZE);
 					}
    				}
     				
@@ -1101,7 +1148,7 @@ int server_stor(int controlfd,char *param,int is_PORT,char *PORT_ip,int PORT_por
 	strcpy(filename,FILE_ROOT);
 	if(filename[strlen(filename)-1]!='/')
 		strcat(filename,"/");
-	strcat(filename,param);		
+	strcat(filename,param);						
 	fp = fopen(filename, "wb"); 
 	if (!fp)
 	{
@@ -1242,18 +1289,19 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 	char prompt1[] = "425 Please use 'PORT' or 'PASV' first to open data connection.\r\n";
 	char prompt2[] = "425 Can't open data connection.\r\n";
 	char prompt3[] = "550 Requested file action not taken.\r\n";
-	char prompt4[] = "150 Data connection already open; transfer starting.\r\n";
+	char prompt4[100];
 	char prompt5[] = "451 Requested action aborted: local error in processing.\r\n";
 	char prompt6[] = "426 Connection closed; transfer aborted.\r\n";
 	char prompt7[] = "226 Closing data connection.\r\n";
 	
 	int datafd = -1;
-	int filefd = -1;	
+	int filefd = -1;
+	int start_write = 1;	
 	FILE* fp = NULL;
 	char data[MAX_SIZE];
 	char sys_command[100];
 	char filename[100];
-	int num_read;
+	int num_read = 0;
 	fd_set rfds,wfds; //读写文件句柄
 	struct timeval timeout={3,0}; //select等待3秒
 	int maxfd = 0;
@@ -1265,23 +1313,24 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 		return -1;
 	}
 	//执行命令并打开文件
-	sprintf(sys_command,"cd %s && ls > tmp.txt",FILE_ROOT);
+	sprintf(sys_command,"cd %s && ls -l > /tmp/tmp.txt",FILE_ROOT);
 	if (system(sys_command) < 0)
 	{
 		send_data(controlfd,prompt3,strlen(prompt3));
 		return -1;
 	}	
-	strcpy(filename,FILE_ROOT);
-	if(filename[strlen(filename)-1]!='/')
-		strcat(filename,"/");
-	strcat(filename,"tmp.txt");		
+	strcpy(filename,"/tmp/tmp.txt");						
 	fp = fopen(filename, "rb"); 
 	if (!fp)
 	{
 		send_data(controlfd,prompt3,strlen(prompt3));
 		return -1;
 	}		
-	filefd = fileno(fp);		
+	filefd = fileno(fp);	
+        struct stat statbuf;
+        stat(filename,&statbuf);
+        int size=statbuf.st_size;
+        sprintf(prompt4,"150 Data connection already open; transfer starting.The file's size is (%d).\r\n",size);	
 	
 	//建立数据连接
 	if(is_PORT)
@@ -1345,9 +1394,11 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
    		FD_ZERO(&wfds);
    		//添加描述符 
 		FD_SET(datafd,&wfds); 
+		FD_SET(controlfd,&rfds);
 		FD_SET(filefd,&rfds); 
 		//描述符最大值加1 
 		maxfd=datafd>filefd?datafd+1:filefd+1; 
+		maxfd=maxfd>(controlfd+1)?maxfd:(controlfd+1);
 			
 		//使用select判断状态
 		switch(select(maxfd,&rfds,&wfds,NULL,&timeout))
@@ -1361,8 +1412,26 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 			case 0:
 				break;
 			default:
+				if(FD_ISSET(controlfd,&rfds))
+				{
+					memset(data,0,MAX_SIZE);
+					num_read=recv(controlfd,data,MAX_SIZE,0);
+					if(!strcmp(data,"finish"))
+					{
+
+						start_write=1;
+					}
+					else if(!strcmp(data,"stop"))
+					{
+						close(datafd);
+						fclose(fp);
+						return -1;	
+					}
+					memset(data,0,MAX_SIZE);
+					num_read = 0;
+				}
 				//如果文件可读
-				if(FD_ISSET(filefd, &rfds))
+				if(start_write&&FD_ISSET(filefd, &rfds))
 				{
 					//读文件内容
 					num_read = fread(data, 1, MAX_SIZE, fp);
@@ -1385,6 +1454,7 @@ int server_list(int controlfd,int is_PORT,char *PORT_ip,int PORT_port,int is_PAS
 							fclose(fp);
 							return -1;
 						}
+						start_write=0;
 					}
    				}
     				
